@@ -17,6 +17,7 @@ const Pessoal = () => {
   const [date, setDate] = useState(new Date().toISOString().substr(0, 10));
   const [isFixed, setIsFixed] = useState(false);
   const [tipoMovimento, setTipoMovimento] = useState("GASTO");
+  const [isVale, setIsVale] = useState(false);
   const [message, setMessage] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState({ show: false, id: null });
   const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -30,12 +31,19 @@ const Pessoal = () => {
   const [isLoadingSave, setIsLoadingSave] = useState(false);
   const [viewFilter, setViewFilter] = useState("TODOS"); // TODOS, GASTOS, GANHOS
   
+  // Estados para o gráfico interativo
+  const [chartMode, setChartMode] = useState("overview"); // "overview" ou "detailed"
+  const [selectedChartType, setSelectedChartType] = useState(null); // "GASTO" ou "GANHO"
+  
   // Estados para categorias
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isCategoryModalAdd, setIsCategoryModalAdd] = useState(false);
+  const [isCategoryModalEdit, setIsCategoryModalEdit] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState({ show: false, id: null });
   const [categoryFilter, setCategoryFilter] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
@@ -62,13 +70,8 @@ const Pessoal = () => {
       .then((response) => {
         setExpenses(response.data);
         console.log("Despesas pessoais carregadas:", response.data);
-        // Expandir todos os grupos por padrão
-        const groupedData = groupExpensesByDescription(response.data);
-        const initialExpandedState = {};
-        Object.keys(groupedData).forEach(key => {
-          initialExpandedState[key] = true;
-        });
-        setExpandedGroups(initialExpandedState);
+        // Todos os grupos começam ocultos - usuário escolhe o que expandir
+        setExpandedGroups({});
       })
       .catch((error) => {
         console.error("Erro ao buscar despesas pessoais:", error);
@@ -122,15 +125,34 @@ const Pessoal = () => {
       axios
         .post("https://api-start-pira.vercel.app/api/desp-pessoal", newExpenseData)
         .then((response) => {
-          const updatedExpenses = [...expenses, response.data];
+          let updatedExpenses = [...expenses, response.data];
           setExpenses(updatedExpenses);
           
-          // Expandir o grupo da nova despesa
-          const groupName = response.data.nomeDespesa || "Sem Descrição";
-          setExpandedGroups(prev => ({
-            ...prev,
-            [groupName]: true
-          }));
+          // Se for GASTO e tiver VALE marcado, criar registro de VALE como GANHO
+          if (tipoMovimento === "GASTO" && isVale) {
+            const valeData = {
+              nomeDespesa: "VALE",
+              valorDespesa: parseFloat(amount),
+              descDespesa: `Vale referente a: ${newExpense}`,
+              date: formattedDate,
+              DespesaFixa: false,
+              tipoMovimento: "GANHO",
+              categoriaId: categoryId,
+            };
+            
+            axios
+              .post("https://api-start-pira.vercel.app/api/desp-pessoal", valeData)
+              .then((valeResponse) => {
+                setExpenses((prevExpenses) => [...prevExpenses, valeResponse.data]);
+                console.log("VALE adicionado automaticamente:", valeResponse.data);
+              })
+              .catch((error) => {
+                console.error("Erro ao adicionar VALE:", error);
+              });
+          }
+          
+          // Nova despesa adicionada - grupo permanece oculto por padrão
+          // Usuário pode expandir manualmente se desejar
           
           setNewExpense("");
           setAmount("");
@@ -138,8 +160,9 @@ const Pessoal = () => {
           setDate(new Date().toISOString().substr(0, 10));
           setIsFixed(false);
           setTipoMovimento("GASTO");
+          setIsVale(false);
           setSelectedCategory("");
-          setMessage({ show: true, text: "Despesa pessoal adicionada com sucesso!", type: "success" });
+          setMessage({ show: true, text: isVale ? "Despesa e VALE adicionados com sucesso!" : "Despesa pessoal adicionada com sucesso!", type: "success" });
           console.log("Despesa pessoal adicionada:", response.data);
           setTimeout(() => setMessage(null), 3000);
 
@@ -221,6 +244,43 @@ const Pessoal = () => {
         setMessage({ show: true, text: "Erro ao excluir categoria!", type: "error" });
         setTimeout(() => setMessage(null), 3000);
       });
+  };
+
+  const handleEditCategory = (category) => {
+    setEditingCategoryId(category.id);
+    setEditingCategoryName(category.nomeCategoria);
+    setIsCategoryModalEdit(true);
+    setIsCategoryModalOpen(false);
+  };
+
+  const handleUpdateCategory = () => {
+    if (editingCategoryName.trim() !== "" && !categories.some((cat) => cat.nomeCategoria === editingCategoryName && cat.id !== editingCategoryId)) {
+      setIsLoading(true);
+      axios
+        .put(`https://api-start-pira.vercel.app/api/cat-desp-pessoal/${editingCategoryId}`, { 
+          nomeCategoria: editingCategoryName 
+        })
+        .then((response) => {
+          setCategories(categories.map(cat => 
+            cat.id === editingCategoryId 
+              ? { ...cat, nomeCategoria: editingCategoryName }
+              : cat
+          ));
+          setEditingCategoryId(null);
+          setEditingCategoryName("");
+          setIsCategoryModalEdit(false);
+          setMessage({ show: true, text: "Categoria atualizada com sucesso!", type: "success" });
+          setTimeout(() => setMessage(null), 3000);
+        })
+        .catch((error) => {
+          setMessage({ show: true, text: "Erro ao atualizar categoria!", type: "error" });
+          setTimeout(() => setMessage(null), 3000);
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      setMessage({ show: true, text: "Nome inválido ou já existe!", type: "error" });
+      setTimeout(() => setMessage(null), 3000);
+    }
   };
 
   const handleEditExpense = (expense) => {
@@ -324,6 +384,11 @@ const Pessoal = () => {
 
   const handleMonthChange = (direction) => {
     setSelectedMonth((prevMonth) => (direction === "prev" ? addMonths(prevMonth, -1) : addMonths(prevMonth, 1)));
+    // Resetar grupos expandidos ao mudar de mês - tudo volta a ficar oculto
+    setExpandedGroups({});
+    // Resetar gráfico para visão geral ao mudar de mês
+    setChartMode("overview");
+    setSelectedChartType(null);
   };
 
   const filteredExpenses = expenses.filter(
@@ -437,6 +502,133 @@ const Pessoal = () => {
     },
   };
 
+  // Função para processar dados por categoria
+  const getDataByCategory = (tipo) => {
+    const expensesByType = filteredExpenses.filter(expense => expense.tipoMovimento === tipo);
+    const categoryData = {};
+    
+    expensesByType.forEach(expense => {
+      const categoryName = expense.categoria?.nomeCategoria || "Sem categoria";
+      if (!categoryData[categoryName]) {
+        categoryData[categoryName] = 0;
+      }
+      categoryData[categoryName] += expense.valorDespesa;
+    });
+    
+    return categoryData;
+  };
+
+  // Handler para clique nas barras do gráfico
+  const handleChartClick = (event, elements) => {
+    if (elements.length > 0 && chartMode === "overview") {
+      const clickedIndex = elements[0].index;
+      const clickedType = clickedIndex === 0 ? "GASTO" : "GANHO";
+      
+      setSelectedChartType(clickedType);
+      setChartMode("detailed");
+    }
+  };
+
+  // Função para voltar ao gráfico geral
+  const handleBackToOverview = () => {
+    setChartMode("overview");
+    setSelectedChartType(null);
+  };
+
+  // Dados dinâmicos do gráfico baseado no modo
+  const getDynamicChartData = () => {
+    if (chartMode === "overview") {
+      return {
+        labels: ["Gastos", "Ganhos"],
+        datasets: [
+          {
+            label: "Valores",
+            data: [
+              gastos.reduce((sum, expense) => sum + expense.valorDespesa, 0),
+              ganhos.reduce((sum, expense) => sum + expense.valorDespesa, 0)
+            ],
+            backgroundColor: ["rgba(255, 99, 132, 0.2)", "rgba(75, 192, 192, 0.2)"],
+            borderColor: ["rgba(255, 99, 132, 1)", "rgba(75, 192, 192, 1)"],
+            borderWidth: 1,
+          },
+        ],
+      };
+    } else {
+      // Modo detalhado por categoria
+      const categoryData = getDataByCategory(selectedChartType);
+      const labels = Object.keys(categoryData);
+      const values = Object.values(categoryData);
+      const baseColor = selectedChartType === "GASTO" ? "255, 99, 132" : "75, 192, 192";
+      
+      return {
+        labels: labels,
+        datasets: [
+          {
+            label: `${selectedChartType === "GASTO" ? "Gastos" : "Ganhos"} por Categoria`,
+            data: values,
+            backgroundColor: labels.map((_, index) => 
+              `rgba(${baseColor}, ${0.2 + (index * 0.1) % 0.6})`
+            ),
+            borderColor: labels.map((_, index) => 
+              `rgba(${baseColor}, ${0.8 + (index * 0.1) % 0.2})`
+            ),
+            borderWidth: 1,
+          },
+        ],
+      };
+    }
+  };
+
+  // Opções dinâmicas do gráfico
+  const getDynamicChartOptions = () => {
+    const baseOptions = {
+      plugins: {
+        legend: {
+          labels: {
+            color: "white",
+          },
+        },
+        datalabels: {
+          display: false,
+        },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            label: (context) => {
+              const value = context.raw;
+              return `R$ ${value.toFixed(2).replace(".", ",")}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: "white",
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.2)",
+          },
+        },
+        y: {
+          ticks: {
+            color: "white",
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.2)",
+          },
+        },
+      },
+    };
+
+    // Adicionar funcionalidade de clique apenas no modo overview
+    if (chartMode === "overview") {
+      baseOptions.onClick = handleChartClick;
+    }
+
+    return baseOptions;
+  };
+
   const totalGastos = allGastos.reduce((sum, expense) => sum + expense.valorDespesa, 0);
   const totalGanhos = allGanhos.reduce((sum, expense) => sum + expense.valorDespesa, 0);
   const saldoMensal = totalGanhos - totalGastos;
@@ -498,6 +690,31 @@ const Pessoal = () => {
               <div className="pessoal-modal-buttons">
                 <button onClick={handleAddCategory}>Confirmar</button>
                 <button onClick={() => setIsCategoryModalAdd(false)}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isCategoryModalEdit && (
+          <div className="pessoal-modal">
+            <div className="pessoal-modal-content">
+              <h3 className="pessoal-modal-title">Editar Categoria</h3>
+              <input 
+                className="pessoal-modal-input" 
+                type="text" 
+                value={editingCategoryName} 
+                onChange={(e) => setEditingCategoryName(e.target.value)} 
+                placeholder="Digite o novo nome da categoria" 
+              />
+              <div className="pessoal-modal-buttons">
+                <button onClick={handleUpdateCategory} disabled={isLoading}>
+                  {isLoading ? <FaSpinner className="pessoal-loading-icon" /> : "Salvar"}
+                </button>
+                <button onClick={() => {
+                  setIsCategoryModalEdit(false);
+                  setEditingCategoryId(null);
+                  setEditingCategoryName("");
+                }}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -579,17 +796,30 @@ const Pessoal = () => {
                     >
                       {category.nomeCategoria}
                     </span>
-                    <button 
-                      className="pessoal-category-delete" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDeleteCategory({ show: true, id: category.id });
-                      }}
-                      title="Excluir categoria" 
-                      disabled={isLoading}
-                    >
-                      🗑️
-                    </button>
+                    <div className="pessoal-category-actions">
+                      <button 
+                        className="pessoal-category-edit" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditCategory(category);
+                        }}
+                        title="Editar categoria" 
+                        disabled={isLoading}
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        className="pessoal-category-delete" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteCategory({ show: true, id: category.id });
+                        }}
+                        title="Excluir categoria" 
+                        disabled={isLoading}
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </li>
                 ))}
               <li 
@@ -606,16 +836,29 @@ const Pessoal = () => {
           )}
         </div>
 
-        <select className="pessoal-input-field" value={tipoMovimento} onChange={(e) => setTipoMovimento(e.target.value)}>
-          <option value="GASTO">Gasto</option>
-          <option value="GANHO">Ganho</option>
-        </select>
+        <div className="pessoal-select-container">
+          <select className="pessoal-input-field-small" value={tipoMovimento} onChange={(e) => setTipoMovimento(e.target.value)}>
+            <option value="GASTO">Gasto</option>
+            <option value="GANHO">Ganho</option>
+          </select>
+          
+          <select className="pessoal-input-field-small" value={isFixed} onChange={(e) => setIsFixed(e.target.value === "true")}>
+            <option value="false">Variável</option>
+            <option value="true">Fixa</option>
+          </select>
+          
+          {tipoMovimento === "GASTO" && (
+            <div className="pessoal-vale-field">
+              <label className="pessoal-vale-label">VALE?</label>
+              <select className="pessoal-input-field-small" value={isVale} onChange={(e) => setIsVale(e.target.value === "true")}>
+                <option value="false">Não</option>
+                <option value="true">Sim</option>
+              </select>
+            </div>
+          )}
+        </div>
         
-        <select className="pessoal-input-field" value={isFixed} onChange={(e) => setIsFixed(e.target.value === "true")}>
-          <option value="false">Variável</option>
-          <option value="true">Fixa</option>
-        </select>
-        
+
         <button className="pessoal-save-btn" onClick={handleAddExpense} disabled={isLoading}>
           {isLoading ? <FaSpinner className="pessoal-loading-icon" /> : "Adicionar"}
         </button>
@@ -632,7 +875,9 @@ const Pessoal = () => {
                 </button>
               </div>
             )}
-            {Object.entries(groupedExpenses).map(([description, group]) => (
+            {Object.entries(groupedExpenses)
+              .sort(([a], [b]) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+              .map(([description, group]) => (
               <li key={description} className="pessoal-expense-group">
                 <div className="pessoal-group-header" onClick={() => toggleGroup(description)}>
                   <span>{description}</span>
@@ -756,12 +1001,27 @@ const Pessoal = () => {
         )}
       </ul>
 
-      <button onClick={handleExportToExcel} className="pessoal-export-btn">
+      {/* <button onClick={handleExportToExcel} className="pessoal-export-btn">
         Exportar para Excel
-      </button>
+      </button> */}
 
       <div className="pessoal-chart-container">
-        <Bar data={chartData} options={chartOptions} plugins={[ChartDataLabels]} />
+        {chartMode === "detailed" && (
+          <div className="pessoal-chart-header">
+            <button className="pessoal-back-btn" onClick={handleBackToOverview}>
+              ← Voltar ao Gráfico Geral
+            </button>
+            <h3 className="pessoal-chart-title">
+              {selectedChartType === "GASTO" ? "Gastos" : "Ganhos"} por Categoria
+            </h3>
+          </div>
+        )}
+        <Bar data={getDynamicChartData()} options={getDynamicChartOptions()} plugins={[ChartDataLabels]} />
+        {chartMode === "overview" && (
+          <p className="pessoal-chart-hint">
+            💡 Clique nas barras para ver detalhes por categoria
+          </p>
+        )}
       </div>
 
       <div className="pessoal-total-summary">

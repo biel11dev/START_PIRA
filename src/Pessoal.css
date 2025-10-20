@@ -221,6 +221,67 @@
   cursor: not-allowed;
 }
 
+/* Campo VALE */
+.pessoal-vale-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  margin: 5px;
+}
+
+.pessoal-vale-label {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  min-width: 50px;
+  text-align: left;
+}
+
+/* Container para os campos select - alinhamento à direita */
+.pessoal-select-container {
+  display: flex;
+  justify-content: left;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  margin-left: 20px;
+}
+
+/* Campo select menor para padronização */
+.pessoal-input-field-small {
+  width: 120px;
+  height: 40px;
+  margin: 5px;
+  padding: 10px;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+  min-width: 120px;
+  max-width: 120px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  color: #333;
+  font-weight: 500;
+  text-shadow: none;
+}
+
+.pessoal-input-field-small:focus {
+  border-color: #007bff;
+  outline: none;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.pessoal-input-field-small:disabled {
+  background: rgba(200, 200, 200, 0.7);
+  color: #666;
+  cursor: not-allowed;
+}
+
 /* Seleção de categoria */
 .pessoal-category-select {
   position: relative;
@@ -288,8 +349,8 @@
   overflow-y: auto;
   width: 100%;
   box-sizing: border-box;
-  min-width: 350px;
-  max-width: 480px;
+  min-width: 250px;
+  max-width: 350px;
 }
 
 .pessoal-category-filter {
@@ -336,15 +397,16 @@
   text-overflow: ellipsis;
 }
 
-.pessoal-category-item:hover {
-  background-color: #f0f0f0;
-  width: 100%;
+.pessoal-category-actions {
+  display: flex;
+  gap: 5px;
+  align-items: center;
 }
 
+.pessoal-category-edit,
 .pessoal-category-delete {
   background: none !important;
   border: none !important;
-  color: red !important;
   cursor: pointer !important;
   font-size: 14px !important;
   margin: 0 !important;
@@ -365,9 +427,27 @@
   flex-shrink: 0 !important;
 }
 
+.pessoal-category-edit {
+  color: #007bff !important;
+}
+
+.pessoal-category-edit:hover {
+  background-color: rgba(0, 123, 255, 0.1) !important;
+  transform: scale(1.05) !important;
+}
+
+.pessoal-category-delete {
+  color: red !important;
+}
+
 .pessoal-category-delete:hover {
   background-color: rgba(255, 0, 0, 0.1) !important;
   transform: scale(1.05) !important;
+}
+
+.pessoal-category-item:hover {
+  background-color: #f0f0f0;
+  width: 100%;
 }
 
 .pessoal-category-add {
@@ -789,6 +869,51 @@
   background-color: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Header do gráfico detalhado */
+.pessoal-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Botão de voltar */
+.pessoal-back-btn {
+  padding: 8px 16px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.pessoal-back-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Título do gráfico */
+.pessoal-chart-title {
+  color: #fff;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Dica do gráfico */
+.pessoal-chart-hint {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  text-align: center;
+  margin-top: 15px;
+  font-style: italic;
 }
 
 /* Resumo dos totais */

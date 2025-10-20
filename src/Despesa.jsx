@@ -41,13 +41,8 @@ const Despesa = () => {
       .then((response) => {
         setExpenses(response.data);
         console.log("Despesas carregadas:", response.data);
-        // Expandir todos os grupos por padrão
-        const groupedData = groupExpensesByDescription(response.data);
-        const initialExpandedState = {};
-        Object.keys(groupedData).forEach(key => {
-          initialExpandedState[key] = true;
-        });
-        setExpandedGroups(initialExpandedState);
+        // Todos os grupos começam ocultos - usuário escolhe o que expandir
+        setExpandedGroups({});
       })
       .catch((error) => {
         console.error("Erro ao buscar despesas:", error);
@@ -97,12 +92,8 @@ const Despesa = () => {
           const updatedExpenses = [...expenses, response.data];
           setExpenses(updatedExpenses);
           
-          // Expandir o grupo da nova despesa
-          const groupName = response.data.nomeDespesa || "Sem Descrição";
-          setExpandedGroups(prev => ({
-            ...prev,
-            [groupName]: true
-          }));
+          // Nova despesa adicionada - grupo permanece oculto por padrão
+          // Usuário pode expandir manualmente se desejar
           
           setNewExpense("");
           setAmount("");
@@ -268,6 +259,8 @@ const Despesa = () => {
 
   const handleMonthChange = (direction) => {
     setSelectedMonth((prevMonth) => (direction === "prev" ? addMonths(prevMonth, -1) : addMonths(prevMonth, 1)));
+    // Resetar grupos expandidos ao mudar de mês - tudo volta a ficar oculto
+    setExpandedGroups({});
   };
 
   const filteredExpenses = expenses.filter(
@@ -471,7 +464,9 @@ const Despesa = () => {
       </div>
 
       <ul className="expense-list">
-        {Object.entries(groupedExpenses).map(([description, group]) => (
+        {Object.entries(groupedExpenses)
+          .sort(([a], [b]) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+          .map(([description, group]) => (
           <li key={description} className="expense-group">
             <div className="group-header" onClick={() => toggleGroup(description)}>
               <span>{description}</span>
