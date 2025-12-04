@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { FaSpinner } from "react-icons/fa";
 import * as XLSX from "xlsx";
 import Message from "./Message";
-import "./ProductList.css";
+import "./BaseProduto.css";
 
 const ProductList = () => {
   const [products, setProducts] = useState([]);
@@ -54,6 +54,14 @@ const ProductList = () => {
     );
     setFilteredProducts(filtered);
   }, [searchTerm, products]);
+
+  // Calcular custo automaticamente: VALOR x QUANTIDADE
+  useEffect(() => {
+    if (value && quantity) {
+      const calculatedCost = parseFloat(value) * parseFloat(quantity);
+      setPrecoCusto(calculatedCost.toFixed(2));
+    }
+  }, [value, quantity]);
 
   const fetchProducts = () => {
     axios
@@ -295,11 +303,11 @@ const ProductList = () => {
   };
 
   return (
-    <div className="product-list-container">
-      <h2 className="fixed-title">Estoque</h2>
+    <div className="bp-container">
+      <h2 className="bp-title">Estoque</h2>
       
       {/* Filtro */}
-      <div className="search-bar">
+      <div className="bp-search">
         <input
           type="text"
           placeholder="Pesquisar produtos..."
@@ -310,17 +318,17 @@ const ProductList = () => {
 
       {/* Modal para adicionar nova unidade */}
       {isUnitModalOpen && (
-        <div className="modal">
-          <div className="modal-content">
-            <h3 className="texto-add-unidade">Adicionar Nova Unidade</h3>
+        <div className="bp-modal">
+          <div className="bp-modal-content">
+            <h3 className="bp-modal-title">Adicionar Nova Unidade</h3>
             <input 
-              className="texto-unidade" 
+              className="bp-modal-input" 
               type="text" 
               value={newUnit} 
               onChange={(e) => setNewUnit(e.target.value)} 
               placeholder="Digite a nova unidade" 
             />
-            <div className="modal-buttons">
+            <div className="bp-modal-buttons">
               <button onClick={handleAddUnit}>Confirmar</button>
               <button onClick={() => setIsUnitModalOpen(false)}>Cancelar</button>
             </div>
@@ -331,7 +339,7 @@ const ProductList = () => {
 
       {/* Formulário de cadastro de produto */}
       <div
-        className="input-group"
+        className="input-group-est"
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             handleAddProduct();
@@ -339,8 +347,9 @@ const ProductList = () => {
         }}
       >
         {/* Campo de auto-complete para nome do produto */}
-        <div className="autocomplete-container" style={{ position: 'relative', display: 'inline-block' }}>
+        <div className="bp-autocomplete">
           <input
+            className="bp-autocomplete-input"
             type="text"
             value={newProduct}
             onChange={handleProductInputChange}
@@ -352,46 +361,13 @@ const ProductList = () => {
             }}
             placeholder="Nome do Produto"
             disabled={isLoading}
-            style={{ width: '150px', maxWidth: 'calc(100vw - 40px)' }}
           />
           {showSuggestions && productSuggestions.length > 0 && (
-            <ul 
-              className="autocomplete-suggestions" 
-              style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                backgroundColor: 'white',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                maxHeight: '200px',
-                overflowY: 'auto',
-                zIndex: 1000,
-                margin: 0,
-                padding: 0,
-                listStyle: 'none',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-              }}
-            >
+            <ul className="bp-suggestions">
               {productSuggestions.map((suggestion, index) => (
                 <li
                   key={index}
                   onClick={() => handleSuggestionClick(suggestion)}
-                  style={{
-                    padding: '10px 15px',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid #eee',
-                    fontSize: '14px',
-                    color: '#333',
-                    textShadow: 'none'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = '#f5f5f5';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = 'white';
-                  }}
                 >
                   {suggestion}
                 </li>
@@ -400,6 +376,7 @@ const ProductList = () => {
           )}
         </div>
         <input
+          className="bp-input-quantidade"
           type="number"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
@@ -407,24 +384,34 @@ const ProductList = () => {
           disabled={isLoading}
         />
         <input
+          className="bp-input-valor"
           type="number"
           value={value}
           onChange={(e) => setPreco(e.target.value)}
           placeholder="Valor (R$)"
           disabled={isLoading}
         />
+        <input
+          className="bp-input-valor"
+          type="number"
+          value={valuecusto}
+          onChange={(e) => setPrecoCusto(e.target.value)}
+          placeholder="Custo (R$)"
+          disabled={isLoading}
+          title="Calculado automaticamente (Valor x Quantidade), mas pode ser editado"
+        />
   
         {/* Campo de seleção de unidades com exclusão */}
-        <div className="custom-select">
-          <div className="selected-unit">{unit || "Selecione uma unidade"}</div>
-          <ul className="unit-dropdown">
+        <div className="bp-select">
+          <div className="bp-selected-unit">{unit || "Selecione uma unidade"}</div>
+          <ul className="bp-unit-dropdown">
             {units.map((u, index) => (
-              <li key={index} className="unit-item">
-                <span className="unit-name" onClick={() => setUnit(u)}>
+              <li key={index} className="bp-unit-item">
+                <span className="bp-unit-name" onClick={() => setUnit(u)}>
                   {u}
                 </span>
                 <button
-                  className="delete-unit-button"
+                  className="bp-delete-unit"
                   onClick={() => handleDeleteUnit(u)}
                   title="Excluir unidade"
                   disabled={isLoading}
@@ -433,28 +420,40 @@ const ProductList = () => {
                 </button>
               </li>
             ))}
-            <li className="add-unit-option" onClick={() => setIsUnitModalOpen(true)}>
+            <li className="bp-add-unit" onClick={() => setIsUnitModalOpen(true)}>
               + Adicionar nova unidade
             </li>
           </ul>
         </div>
-        <button onClick={handleAddProduct} disabled={isLoading}>
-          {isLoading ? <FaSpinner className="loading-iconn" /> : "Adicionar Produto"}
+        <button className="bp-btn-add" onClick={handleAddProduct} disabled={isLoading}>
+          {isLoading ? <FaSpinner className="bp-loading" /> : "Adicionar Produto"}
         </button>
       </div>
 
       {/* Lista de produtos agrupados por categoria */}
-      <ul className="product-list">
+      <div className="bp-header">
+        <div className="bp-header-container">
+          <div className="bp-header-col">NOME DO PRODUTO</div>
+          <div className="bp-header-col">QTD</div>
+          <div className="bp-header-col">UNIDADE</div>
+          <div className="bp-header-col">CATEGORIA</div>
+          <div className="bp-header-col">VALOR UN</div>
+          <div className="bp-header-col">CUSTO</div>
+        </div>
+        <div className="bp-header-actions">AÇÕES</div>
+      </div>
+
+      <ul className="bp-list">
         {Object.entries(groupProductsByCategory(filteredProducts)).map(([categoryName, categoryProducts]) => (
-          <li key={categoryName} className="product-group">
-            <div className="group-header" onClick={() => toggleGroup(categoryName)}>
-              <div className="group-title">
+          <li key={categoryName} className="bp-group">
+            <div className="bp-group-header" onClick={() => toggleGroup(categoryName)}>
+              <div className="bp-group-title">
                 <span>{categoryName}</span>
               </div>
-              <div className="group-info">
-                <span className="group-count">{categoryProducts.length}</span>
+              <div className="bp-group-info">
+                <span className="bp-group-count">{categoryProducts.length}</span>
                 <button 
-                  className="botao-expend"
+                  className="bp-expand-btn"
                   onClick={(e) => {
                     e.stopPropagation();
                     toggleGroup(categoryName);
@@ -465,119 +464,126 @@ const ProductList = () => {
               </div>
             </div>
             {expandedGroups[categoryName] && (
-              <ul className="group-details">
+              <ul className="bp-details">
                 {categoryProducts.map((product) => (
-                  <li className="lista-produtos" key={product.id}>
-                    {editingProduct === product.id ? (
-                      <>
-                        <div className="product-info">
-                          <label className="product-label">Nome</label>
-                          <input 
-                            type="text" 
-                            value={editingProductData.name} 
-                            onChange={(e) => setEditingProductData({ ...editingProductData, name: e.target.value })} 
-                          />
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Quantidade</label>
-                          <input 
-                            type="number" 
-                            value={editingProductData.quantity} 
-                            onChange={(e) => setEditingProductData({ ...editingProductData, quantity: e.target.value })} 
-                          />
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Unidade</label>
-                          <select 
-                            className="unidade-text" 
-                            value={editingProductData.unit} 
-                            onChange={(e) => setEditingProductData({ ...editingProductData, unit: e.target.value })}
-                          >
-                            {units.map((u, index) => (
-                              <option key={index} value={u}>
-                                {u}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Categoria</label>
-                          <select 
-                            className="unidade-text" 
-                            value={editingProductData.categoryId || ""} 
-                            onChange={(e) => setEditingProductData({ ...editingProductData, categoryId: e.target.value })}
-                          >
-                            <option value="">Sem categoria</option>
-                            {categories.map((cat) => (
-                              <option key={cat.id} value={cat.id}>
-                                {cat.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Valor</label>
-                          <input 
-                            type="number" 
-                            value={editingProductData.value} 
-                            onChange={(e) => setEditingProductData({ ...editingProductData, value: e.target.value })} 
-                          />
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Custo</label>
-                          <input 
-                            type="number" 
-                            value={editingProductData.valuecusto} 
-                            onChange={(e) => setEditingProductData({ ...editingProductData, valuecusto: e.target.value })} 
-                          />
-                        </div>
-                        <button className="save-button" onClick={handleSaveProduct}>
-                          Salvar
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <div className="product-info">
-                          <label className="product-label">Nome</label>
-                          <span className="product-name">{product.name}</span>
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Quantidade</label>
-                          <span className="product-quantity">{product.quantity}</span>
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Unidade</label>
-                          <span className="product-unit">{product.unit}</span>
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Categoria</label>
-                          <span className="product-category">{product.category?.name || "Sem categoria"}</span>
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Valor</label>
-                          <span className="product-value">{formatCurrency(product.value)}</span>
-                        </div>
-                        <div className="product-info">
-                          <label className="product-label">Custo</label>
-                          <span className="product-value">{formatCurrency(product.valuecusto)}</span>
-                        </div>
-                        <button className="update-button" onClick={() => handleUpdateProduct(product)}>
-                          Atualizar
-                        </button>
-                        <button className="delete-button" onClick={() => handleDeleteProduct(product.id)}>
-                          Excluir
-                        </button>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                  <li className="bp-item" key={product.id}>
+                {editingProduct === product.id ? (
+                  <div className="bp-edit-form">
+                    <div className="bp-edit-field">
+                      <label className="bp-edit-label">Nome</label>
+                      <input 
+                        className="bp-edit-input"
+                        type="text" 
+                        value={editingProductData.name} 
+                        onChange={(e) => setEditingProductData({ ...editingProductData, name: e.target.value })} 
+                      />
+                    </div>
+                    <div className="bp-edit-field">
+                      <label className="bp-edit-label">Quantidade</label>
+                      <input 
+                        className="bp-edit-input"
+                        type="number" 
+                        value={editingProductData.quantity} 
+                        onChange={(e) => setEditingProductData({ ...editingProductData, quantity: e.target.value })} 
+                      />
+                    </div>
+                    <div className="bp-edit-field">
+                      <label className="bp-edit-label">Unidade</label>
+                      <select 
+                        className="bp-edit-input" 
+                        value={editingProductData.unit} 
+                        onChange={(e) => setEditingProductData({ ...editingProductData, unit: e.target.value })}
+                      >
+                        {units.map((u, index) => (
+                          <option key={index} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="bp-edit-field">
+                      <label className="bp-edit-label">Categoria</label>
+                      <select 
+                        className="bp-edit-input" 
+                        value={editingProductData.categoryId || ""} 
+                        onChange={(e) => setEditingProductData({ ...editingProductData, categoryId: e.target.value })}
+                      >
+                        <option value="">Sem categoria</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="bp-edit-field">
+                      <label className="bp-edit-label">Valor</label>
+                      <input 
+                        className="bp-edit-input"
+                        type="number" 
+                        value={editingProductData.value} 
+                        onChange={(e) => setEditingProductData({ ...editingProductData, value: e.target.value })} 
+                      />
+                    </div>
+                    <div className="bp-edit-field">
+                      <label className="bp-edit-label">Custo</label>
+                      <input 
+                        className="bp-edit-input"
+                        type="number" 
+                        value={editingProductData.valuecusto} 
+                        onChange={(e) => setEditingProductData({ ...editingProductData, valuecusto: e.target.value })} 
+                      />
+                    </div>
+                    <div className="bp-edit-buttons">
+                      <button className="bp-btn-save" onClick={handleSaveProduct}>
+                        Salvar
+                      </button>
+                      <button className="bp-btn-cancel" onClick={() => setEditingProduct(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bp-info-container">
+                      <div className="bp-info-row">
+                        <span className="bp-info-value">{product.name}</span>
+                      </div>
+                      <div className="bp-info-row">
+                        <span className="bp-info-value">{product.quantity}</span>
+                      </div>
+                      <div className="bp-info-row">
+                        <span className="bp-info-value">{product.unit}</span>
+                      </div>
+                      <div className="bp-info-row">
+                        <span className="bp-info-value">{product.category?.name || "Sem categoria"}</span>
+                      </div>
+                      <div className="bp-info-row">
+                        <span className="bp-value-destaquee">{formatCurrency(product.value)}</span>
+                      </div>
+                      <div className="bp-info-row">
+                        <span className="bp-value-destaque">{formatCurrency(product.valuecusto)}</span>
+                      </div>
+                    </div>
+                    <div className="bp-actions">
+                      <button className="bp-btn-update" onClick={() => handleUpdateProduct(product)}>
+                        Editar
+                      </button>
+                      <button className="bp-btn-delete" onClick={() => handleDeleteProduct(product.id)}>
+                        Excluir
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
             )}
           </li>
         ))}
       </ul>
 
-      <button onClick={handleExportToExcel} className="export-button">
+      <button onClick={handleExportToExcel} className="bp-btn-export">
         Exportar para Excel
       </button>
 

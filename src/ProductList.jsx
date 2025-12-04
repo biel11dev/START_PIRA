@@ -876,7 +876,7 @@ const ProductList = () => {
                             <button onClick={() => handleEditProduct(product)} className="update-button">
                               Editar
                             </button>
-                            <button onClick={() => handleDeleteProduct(product.id)} className="delete-button">
+                            <button onClick={() => handleDeleteProduct(product.id)} className="delete-buttonn">
                               Excluir
                             </button>
                           </div>

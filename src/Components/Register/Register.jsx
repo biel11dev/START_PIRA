@@ -7,6 +7,7 @@ import "./Register.css";
 
 const Register = () => {
   const [username, setUsername] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState(""); // Estado para armazenar a confirmação da senha
   const [passwordError, setPasswordError] = useState(""); // Estado para armazenar a mensagem de erro de senha
@@ -31,7 +32,7 @@ const Register = () => {
 
     console.log("Username:", username, "Password:", password); // Adicione este console.log para verificar os valores
     try {
-      await axios.post("https://api-start-pira.vercel.app/api/register", { username, password });
+      await axios.post("https://api-start-pira.vercel.app/api/register", { username, password, name });
       setMessage("Usuário registrado com sucesso!");
       setMessageType("success");
       setShowMessage(true);
@@ -54,6 +55,11 @@ const Register = () => {
     <div className="container">
       <form onSubmit={handleSubmit}>
         <h3>Registrar</h3>
+        <div className="input-field">
+          <label>Nome Completo</label>
+          <input type="text" className="form-control" placeholder="Digite seu nome completo" required onChange={(e) => setName(e.target.value)} />
+          <FaUser className="icon" />
+        </div>
         <div className="input-field">
           <label>Email</label>
           <input type="email" className="form-control" placeholder="Digite email" required onChange={(e) => setUsername(e.target.value)} />

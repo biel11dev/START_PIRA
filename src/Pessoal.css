@@ -224,10 +224,10 @@
 /* Campo VALE */
 .pessoal-vale-field {
   display: flex;
-  flex-direction: row;
   align-items: center;
   gap: 10px;
-  margin: 5px;
+  margin: 0;
+  padding: 0;
 }
 
 .pessoal-vale-label {
@@ -235,20 +235,22 @@
   font-size: 14px;
   font-weight: 600;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-  min-width: 50px;
-  text-align: left;
+  white-space: nowrap;
+  margin: 0;
+  padding: 0;
 }
 
 /* Container para os campos select - alinhamento à direita */
 .pessoal-select-container {
   display: flex;
-  justify-content: left;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
   flex-wrap: wrap;
-  margin: 10px 0;
-  margin-left: 20px;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  flex-basis: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 /* Campo select menor para padronização */

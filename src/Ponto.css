@@ -262,3 +262,10 @@ background: linear-gradient(135deg, #0d29a5 0%, #330363 100%);
 
   color: #fff;
 }
+
+strong {
+  text-shadow: none;
+}
+p {
+  text-shadow: none;
+}

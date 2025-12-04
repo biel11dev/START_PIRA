@@ -29,6 +29,8 @@
   background-color: #f4f4f4;
   font-weight: bold;
   color: #555;
+  text-shadow: none;
+
 }
 
 .permissions-manager td {
@@ -89,4 +91,8 @@
 
 .btn-cadastrar-usuario:active {
   background-color: #004494;
+}
+
+.no-text-shadow {
+  text-shadow: none;
 }

@@ -368,9 +368,8 @@ html, body {
 /* Action Buttons */
 .save-button,
 .update-button,
-.delete-button,
 .cancel-button {
-  padding: 8px 16px;
+  padding: 8px 10px;
   font-size: 12px;
   border-radius: 4px;
   border: none;
@@ -378,6 +377,18 @@ html, body {
   transition: all 0.2s ease;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.delete-buttonn {
+  padding: 8px 14px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  white-space: nowrap;
+  margin-left: 15px;
 }
 
 .save-button {
@@ -406,12 +417,12 @@ html, body {
   background-color: #0056b3;
 }
 
-.delete-button {
+.delete-buttonn {
   background-color: #dc3545;
   color: white;
 }
 
-.delete-button:hover {
+.delete-buttonn:hover {
   background-color: #c82333;
 }
 

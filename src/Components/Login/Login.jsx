@@ -18,9 +18,9 @@ const Login = () => {
 
     try {
       const response = await axios.post("https://api-start-pira.vercel.app/api/login", { username, password });
-      const { token, permissions } = response.data;
+      const { token, permissions, name, username: user } = response.data;
 
-      login(token, permissions); // Chama a função de login do contexto
+      login(token, permissions, name || user); // Chama a função de login do contexto com o nome
       navigate("/dashboard");
     } catch (error) {
       alert("Credenciais inválidas");

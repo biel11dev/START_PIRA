@@ -8,6 +8,7 @@ import CashRegister from "./CashRegister";
 import ClientDetails from "./ClientDetails";
 import Login from "./Components/Login/Login";
 import Register from "./Components/Register/Register";
+import UserInfo from "./Components/UserInfo";
 import Dashboard from "./Dashboard";
 import Despesa from "./Despesa";
 import Fiado from "./Fiado";
@@ -39,6 +40,7 @@ function App() {
     <div className={`App ${isLoginRegisterDashboard ? "background-login-register-dashboard" : "background-other"}`}>
       {isLoginRegisterDashboard && <h1 className="app-title">Start Pira</h1>} {/* Exibe o título apenas nas rotas especificadas */}
       {!isLoginRoute && !isResetRoute && !isForgotRoute && auth.isAuthenticated && <Sidebar permissions={auth.permissions} />}{" "}
+      {!isLoginRoute && !isResetRoute && !isForgotRoute && auth.isAuthenticated && <UserInfo />}{" "}
       {/* Renderiza a Sidebar apenas se o usuário estiver autenticado */}
       <div className="content">
         <Routes>
