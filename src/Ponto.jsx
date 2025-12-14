@@ -1467,7 +1467,7 @@ const handleSaveEdit = () => {
         </select>
         
         {/* Botão para gerar JPEG */}
-        <button 
+        {/* <button 
           onClick={generatePayslipJPG}
           style={{ 
             padding: "8px 15px", 
@@ -1482,7 +1482,7 @@ const handleSaveEdit = () => {
         >
           📄 Gerar Holerite
         </button>
-        
+         */}
         {/* Botão para gerar Recibo */}
         <button 
           onClick={generateReceipt}
@@ -1497,7 +1497,7 @@ const handleSaveEdit = () => {
           }}
           disabled={!selectedEmployeeId}
         >
-          🧾 Gerar Recibo
+          🧾 Gerar Holerite
         </button>
       </div>
 
@@ -1749,12 +1749,23 @@ const handleSaveEdit = () => {
   );
   })()}
 
+      {/* Informação do Colaborador Selecionado */}
+      {selectedEmployeeId && (() => {
+        const selectedEmployee = employees.find(emp => emp.id === selectedEmployeeId);
+        if (!selectedEmployee) return null;
+        return (
+          <div className="employee-info-banner">
+            <h3 className="employee-info-title">
+              {selectedEmployee.name.toUpperCase()} - {(selectedEmployee.position || 'N/A').toUpperCase()}
+            </h3>
+          </div>
+        );
+      })()}
+
       <table className="ponto-table">
         <thead>
           <tr>
             <th>Data</th>
-            <th>Colaborador</th>
-            <th>Função</th>
             <th>Entrada</th>
             <th>Saída</th>
             {/* <th>Portão Aberto</th> */}
@@ -1770,12 +1781,6 @@ const handleSaveEdit = () => {
             filteredData.map((employee) => (
               <tr key={employee.id} className={employee.falta ? "linha-falta" : ""}>
                 <td className="td-funcionario">{formatDateWithWeekday(selectedDate)}</td>
-                <td 
-                  className="td-funcionario" 
-                >
-                  {employee.name}
-                </td>
-                <td className="td-funcionario">{employee.position || "N/A"}</td>
                 <td>
                   <input
                     className="input-funcionario"
@@ -1881,12 +1886,6 @@ const handleSaveEdit = () => {
                 ...pointsSorted.map((point) => (
                   <tr key={employee.id + point.date} className={point.falta ? "linha-falta" : ""}>
                     <td className="td-funcionario">{formatDateWithWeekday(point.date)}</td>
-                    <td 
-                      className="td-funcionario" 
-                    >
-                      {employee.name}
-                    </td>
-                    <td className="td-funcionario">{employee.position || "N/A"}</td>
                     <td>
                       <input
                         className="input-funcionario"
@@ -1958,21 +1957,26 @@ const handleSaveEdit = () => {
                   </tr>
                 )),
                 <tr key={employee.id + "-resumo"}>
-                  <td colSpan={5} style={{ textAlign: "center", fontWeight: "bold", background: "black", color: "#fff" }}>
+                  <td colSpan={3} className="resumo-label">
                     Resumo horas:
                   </td>
-                  <td style={{ fontWeight: "bold", background: "black", color: "#fff" }}>{formatHM(totalWorked)}</td>
-                  <td style={{ fontWeight: "bold", background: "black", color: "#fff", minWidth: "80px" }}>
+                  <td className="resumo-horas">{formatHM(totalWorked)}</td>
+                  <td className="resumo-valor">
                     {(() => {
                       const weeklyCalc = calculateWeeklyValue(employee, pointsSorted);
                       const valorTotal = weeklyCalc.valorBase + weeklyCalc.bonificacao;
                       return (
                         <>
-                          R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <div className="valor-base">R$ {weeklyCalc.valorBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           {weeklyCalc.temBonificacao && (
-                            <div style={{ fontSize: '12px', color: '#4caf50' }}>
-                              🏆 1 Bonificação Semanal!
-                            </div>
+                            <>
+                              <div className="valor-bonificacao">
+                                + R$ {weeklyCalc.bonificacao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 🏆
+                              </div>
+                              <div className="valor-total">
+                                = R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </>
                           )}
                         </>
                       );
@@ -2014,8 +2018,6 @@ const handleSaveEdit = () => {
                 ...pointsSorted.map((point) => (
                   <tr key={employee.id + point.date} className={point.falta ? "linha-falta" : ""}>
                     <td className="td-funcionario">{formatDateWithWeekday(point.date)}</td>
-                    <td className="td-funcionario">{employee.name}</td>
-                    <td className="td-funcionario">{employee.position || "N/A"}</td>
                     <td>
                       <input
                         className="input-funcionario"
@@ -2087,13 +2089,11 @@ const handleSaveEdit = () => {
                   </tr>
                 )),
                 <tr key={employee.id + "-resumo"}>
-                  <td colSpan={5} style={{ textAlign: "center", fontWeight: "bold", background: "black", color: "#fff" }}>
+                  <td colSpan={3} className="resumo-label">
                     Resumo horas:
                   </td>
-                  <td style={{ fontWeight: "bold", background: "black", color: "#fff" }}>{formatHM(totalWorked)}</td>
-                  <td style={{ fontWeight: "bold", background: "black", color: "#fff", minWidth: "80px" }}>
-                    R$ {calculateMonthlyValue(employee, pointsSorted).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    {/* Indica quantas bonificações semanais foram conquistadas */}
+                  <td className="resumo-horas">{formatHM(totalWorked)}</td>
+                  <td className="resumo-valor">
                     {(() => {
                       // Agrupar pontos por semana (excluindo segundas-feiras)
                       const weeklyGroups = {};
@@ -2108,24 +2108,37 @@ const handleSaveEdit = () => {
                         }
                       });
 
+                      let valorBaseTotal = 0;
+                      let bonificacaoTotal = 0;
                       let bonificacoesConquistadas = 0;
 
-                      // Verificar cada semana usando calculateWeeklyValue
+                      // Calcular valor base e bonificação para cada semana
                       Object.values(weeklyGroups).forEach(weekPoints => {
                         const weekCalc = calculateWeeklyValue(employee, weekPoints);
+                        valorBaseTotal += weekCalc.valorBase;
+                        bonificacaoTotal += weekCalc.bonificacao;
                         if (weekCalc.temBonificacao) {
                           bonificacoesConquistadas++;
                         }
                       });
                       
-                      if (bonificacoesConquistadas > 0) {
-                        return (
-                          <div style={{ fontSize: '12px', color: '#4caf50' }}>
-                            🏆 {bonificacoesConquistadas} Bonificação{bonificacoesConquistadas > 1 ? 's' : ''} Semanal{bonificacoesConquistadas > 1 ? 's' : ''}!
-                          </div>
-                        );
-                      }
-                      return null;
+                      const valorTotal = valorBaseTotal + bonificacaoTotal;
+                      
+                      return (
+                        <>
+                          <div className="valor-base">R$ {valorBaseTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          {bonificacoesConquistadas > 0 && (
+                            <>
+                              <div className="valor-bonificacao">
+                                + R$ {bonificacaoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 🏆 ({bonificacoesConquistadas}x)
+                              </div>
+                              <div className="valor-total">
+                                = R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </>
+                          )}
+                        </>
+                      );
                     })()}
                   </td>
                   {/* <td style={{ fontWeight: "bold", background: "black", color: "#fff" }}>{formatExtra(totalExtras)}</td> */}

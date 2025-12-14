@@ -215,6 +215,7 @@
 .expense-list-header .header-description {
   color: #87ceeb;
   font-weight: 600;
+  text-shadow: none;
 }
 
 .expense-list-header .header-amount {
@@ -363,6 +364,7 @@
   color: #007bff;
   font-weight: 500;
   font-size: 12px;
+  text-shadow: none;
 }
 
 .expense-amount {
@@ -978,5 +980,292 @@
   .cancel-button {
     padding: 6px 12px;
     font-size: 11px;
+  }
+}
+
+/* Histórico de Movimentações */
+.movements-history {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 20px 0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.movements-history:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.movements-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.movements-title {
+  margin: 0;
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.movements-count {
+  color: white;
+  font-size: 14px;
+  opacity: 0.9;
+  margin-top: -37px;
+}
+
+.movements-list {
+  margin-top: 12px;
+}
+
+.movement-item {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.movement-info {
+  flex: 1;
+}
+
+.movement-name {
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.movement-timestamp {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.movement-amount {
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.movements-more {
+  text-align: center;
+  color: white;
+  font-size: 12px;
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
+.movements-empty {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+/* Modal de Movimentações */
+.movements-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.movements-modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.movements-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.movements-modal-title {
+  margin: 0;
+  color: #333;
+  font-size: 24px;
+  text-shadow: none;
+
+}
+
+.movements-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  text-shadow: none;
+}
+
+.movements-modal-close:hover {
+  color: #333;
+}
+
+.movements-modal-info {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.movements-modal-month {
+  color: #666;
+  font-size: 14px;  
+  text-shadow: none;
+
+}
+
+.movement-detail-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  text-shadow: none;
+
+}
+
+.movement-detail-item.add {
+  background: #f0fdf4;
+}
+
+.movement-detail-item.delete {
+  background: #fef2f2;
+}
+
+.movement-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.movement-detail-left {
+  flex: 1;
+}
+
+.movement-detail-type {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.movement-detail-icon {
+  font-size: 20px;
+  text-shadow: none;
+}
+
+.movement-detail-label {
+  font-weight: bold;
+  font-size: 16px;
+  text-shadow: none;
+
+}
+
+.movement-detail-label.add {
+  color: #16a34a;
+}
+
+.movement-detail-label.delete {
+  color: #dc2626;
+}
+
+.movement-detail-name {
+  color: #333;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  text-shadow: none;
+
+}
+
+.movement-detail-description {
+  color: #666;
+  font-size: 13px;
+  margin-top: 4px;
+  text-shadow: none;
+}
+
+.movement-detail-time {
+  color: #999;
+  font-size: 12px;
+  margin-top: 8px;
+  text-shadow: none;
+}
+
+.movement-detail-amount {
+  font-weight: bold;
+  font-size: 16px;
+  min-width: 100px;
+  text-align: right;
+  text-shadow: none;
+}
+
+.movement-detail-amount.add {
+  color: #16a34a;
+}
+
+.movement-detail-amount.delete {
+  color: #dc2626;
+}
+
+.movements-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+}
+
+.movements-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.movements-empty-text {
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .movements-history {
+    padding: 12px;
+    margin: 15px 0;
+  }
+
+  .movements-title {
+    font-size: 16px;
+  }
+
+  .movements-modal-content {
+    width: 95%;
+    padding: 16px;
+  }
+
+  .movements-modal-title {
+    font-size: 20px;
+  }
+
+  .movement-detail-item {
+    padding: 12px;
   }
 }

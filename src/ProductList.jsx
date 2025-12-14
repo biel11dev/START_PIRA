@@ -40,12 +40,24 @@ const ProductList = () => {
   const [unitEquivalence, setUnitEquivalence] = useState("");
   const [unitEquivalences, setUnitEquivalences] = useState({});
 
+  // Estados para ordenação
+  const [sortField, setSortField] = useState("");
+  const [sortOrder, setSortOrder] = useState("asc"); // "asc" ou "desc"
+
+  // Estados para auto-complete
+  const [productSuggestions, setProductSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [allProductNames, setAllProductNames] = useState([]);
+
   useEffect(() => {
     axios
       .get("https://api-start-pira.vercel.app/api/products")
       .then((response) => {
         setProducts(response.data);
         setFilteredProducts(response.data);
+        // Extrair nomes únicos para auto-complete
+        const uniqueNames = [...new Set(response.data.map(product => product.name))];
+        setAllProductNames(uniqueNames);
         console.log("Produtos carregados:", response.data);
       })
       .catch((error) => {
@@ -89,11 +101,54 @@ const ProductList = () => {
   }, []);
 
   useEffect(() => {
-    const filtered = products.filter(
+    let filtered = products.filter(
       (product) => product.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    // Aplicar ordenação
+    if (sortField) {
+      filtered = [...filtered].sort((a, b) => {
+        let aValue, bValue;
+
+        switch (sortField) {
+          case "name":
+            aValue = a.name.toLowerCase();
+            bValue = b.name.toLowerCase();
+            break;
+          case "quantity":
+            aValue = parseFloat(a.quantity) || 0;
+            bValue = parseFloat(b.quantity) || 0;
+            break;
+          case "value":
+            aValue = parseFloat(a.value) || 0;
+            bValue = parseFloat(b.value) || 0;
+            break;
+          case "valuecusto":
+            aValue = parseFloat(a.valuecusto) || 0;
+            bValue = parseFloat(b.valuecusto) || 0;
+            break;
+          default:
+            return 0;
+        }
+
+        if (sortOrder === "asc") {
+          return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+        } else {
+          return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+        }
+      });
+    }
+
     setFilteredProducts(filtered);
-  }, [searchTerm, products]);
+  }, [searchTerm, products, sortField, sortOrder]);
+
+  // Calcular custo automaticamente: VALOR x QUANTIDADE
+  useEffect(() => {
+    if (value && quantity) {
+      const calculatedCost = parseFloat(value) * parseFloat(quantity);
+      setPrecoCusto(calculatedCost.toFixed(2));
+    }
+  }, [value, quantity]);
 
   useEffect(() => {
     if (!isCategoryModalOpen) return;
@@ -259,6 +314,45 @@ const ProductList = () => {
     setIsUnitEquivalenceModalOpen(true);
   };
 
+  // Funções de auto-complete
+  const handleProductInputChange = (e) => {
+    const value = e.target.value;
+    setNewProduct(value);
+    
+    if (value.length > 0) {
+      const filtered = allProductNames.filter(name =>
+        name.toLowerCase().includes(value.toLowerCase())
+      );
+      setProductSuggestions(filtered.slice(0, 25));
+      setShowSuggestions(true);
+    } else {
+      setProductSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion) => {
+    setNewProduct(suggestion);
+    setShowSuggestions(false);
+    setProductSuggestions([]);
+    
+    // Buscar dados do produto selecionado para preencher automaticamente
+    const selectedProduct = products.find(p => p.name === suggestion);
+    if (selectedProduct) {
+      setUnit(selectedProduct.unit);
+      setPreco(selectedProduct.value);
+      setPrecoCusto(selectedProduct.valuecusto);
+      setSelectedCategory(selectedProduct.categoryId?.toString() || "");
+    }
+  };
+
+  const handleProductInputBlur = () => {
+    // Delay para permitir o clique na sugestão
+    setTimeout(() => {
+      setShowSuggestions(false);
+    }, 200);
+  };
+
   const handleAddCategory = () => {
     if (newCategory.trim() !== "" && !getAllCategories().some((cat) => cat.name === newCategory)) {
       setIsLoading(true);
@@ -317,22 +411,49 @@ const ProductList = () => {
   };
 
   const groupProductsByCategory = (products) => {
-    return products.reduce((groups, product) => {
-      let categoryName = "Sem Categoria";
+    const hierarchy = {};
+    
+    products.forEach(product => {
+      let parentName = "Sem Categoria";
+      let subcategoryName = null;
+      
       if (product.category) {
         if (product.category.parent) {
-          categoryName = `${product.category.parent.name} > ${product.category.name}`;
+          // Produto tem subcategoria
+          parentName = product.category.parent.name;
+          subcategoryName = product.category.name;
         } else {
-          categoryName = product.category.name;
+          // Produto tem apenas categoria pai
+          parentName = product.category.name;
         }
       }
       
-      if (!groups[categoryName]) {
-        groups[categoryName] = [];
+      // Criar categoria pai se não existir
+      if (!hierarchy[parentName]) {
+        hierarchy[parentName] = {
+          totalCount: 0,
+          subcategories: {}
+        };
       }
-      groups[categoryName].push(product);
-      return groups;
-    }, {});
+      
+      if (subcategoryName) {
+        // Adicionar à subcategoria
+        if (!hierarchy[parentName].subcategories[subcategoryName]) {
+          hierarchy[parentName].subcategories[subcategoryName] = [];
+        }
+        hierarchy[parentName].subcategories[subcategoryName].push(product);
+      } else {
+        // Adicionar direto à categoria pai (sem subcategoria)
+        if (!hierarchy[parentName].subcategories['_direct']) {
+          hierarchy[parentName].subcategories['_direct'] = [];
+        }
+        hierarchy[parentName].subcategories['_direct'].push(product);
+      }
+      
+      hierarchy[parentName].totalCount++;
+    });
+    
+    return hierarchy;
   };
 
   const toggleGroup = (categoryName) => {
@@ -545,13 +666,35 @@ const ProductList = () => {
 
       {/* Formulário de entrada */}
       <div className="input-group" onKeyDown={(e) => { if (e.key === "Enter") handleAddProduct(); }}>
-        <input 
-          type="text" 
-          value={newProduct} 
-          onChange={(e) => setNewProduct(e.target.value)} 
-          placeholder="Nome do Produto" 
-          disabled={isLoading} 
-        />
+        {/* Campo de auto-complete para nome do produto */}
+        <div className="autocomplete-wrapper">
+          <input 
+            type="text" 
+            value={newProduct} 
+            onChange={handleProductInputChange}
+            onBlur={handleProductInputBlur}
+            onFocus={() => {
+              if (newProduct.length > 0 && productSuggestions.length > 0) {
+                setShowSuggestions(true);
+              }
+            }}
+            placeholder="Nome do Produto" 
+            disabled={isLoading} 
+          />
+          {showSuggestions && productSuggestions.length > 0 && (
+            <ul className="suggestions-list">
+              {productSuggestions.map((suggestion, index) => (
+                <li
+                  key={index}
+                  onClick={() => handleSuggestionClick(suggestion)}
+                  className="suggestion-item"
+                >
+                  {suggestion}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <input 
           type="number" 
           value={quantity} 
@@ -567,11 +710,13 @@ const ProductList = () => {
           disabled={isLoading} 
         />
         <input 
+          className="input-custo-calculado"
           type="number" 
           value={valuecusto} 
           onChange={(e) => setPrecoCusto(e.target.value)} 
           placeholder="Custo (R$)" 
-          disabled={isLoading} 
+          disabled={isLoading}
+          title="Calculado automaticamente (Valor x Quantidade), mas pode ser editado"
         />
         
         {/* Seletor de unidades */}
@@ -733,6 +878,33 @@ const ProductList = () => {
         </button>
       </div>
 
+      {/* Filtros de ordenação */}
+      <div className={`sort-filters ${isCategoryModalOpen ? 'modal-open' : ''}`}>
+        <label>Ordenar por:</label>
+        <select 
+          value={sortField} 
+          onChange={(e) => {
+            setSortField(e.target.value);
+            if (!e.target.value) setSortOrder("asc");
+          }}
+        >
+          <option value="">Nenhum</option>
+          <option value="name">Nome (A-Z)</option>
+          <option value="quantity">Quantidade</option>
+          <option value="value">Valor</option>
+          <option value="valuecusto">Custo</option>
+        </select>
+        {sortField && (
+          <button 
+            className="sort-order-btn"
+            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            title={sortOrder === "asc" ? "Crescente" : "Decrescente"}
+          >
+            {sortOrder === "asc" ? "↑ Crescente" : "↓ Decrescente"}
+          </button>
+        )}
+      </div>
+
       {/* Lista de produtos */}
       <div className="product-list">
         {/* Cabeçalho da lista */}
@@ -746,26 +918,54 @@ const ProductList = () => {
           <span className="header-actions">Ações</span>
         </div>
 
-        {/* Lista agrupada por categoria */}
+        {/* Lista agrupada por categoria hierárquica */}
         <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
-          {Object.entries(groupProductsByCategory(filteredProducts)).map(([categoryName, categoryProducts]) => (
-            <li key={categoryName} className="product-group">
-              <div className="group-header" onClick={() => toggleGroup(categoryName)}>
-                <span>{categoryName}</span>
-                <span>{categoryProducts.length} produtos</span>
+          {Object.entries(groupProductsByCategory(filteredProducts)).map(([parentName, parentData]) => (
+            <li key={parentName} className="product-group">
+              {/* Cabeçalho da categoria PAI */}
+              <div className="group-header parent-category-header" onClick={() => toggleGroup(parentName)}>
+                <span> {parentName}</span>
+                <span>{parentData.totalCount} produtos</span>
                 <button 
                   className="botao-expend"
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleGroup(categoryName);
+                    toggleGroup(parentName);
                   }}
                 >
-                  {expandedGroups[categoryName] ? "Ocultar" : "Expandir"}
+                  {expandedGroups[parentName] ? "Ocultar" : "Expandir"}
                 </button>
               </div>
-              {expandedGroups[categoryName] && (
-                <ul className="group-details">
-                  {categoryProducts.map((product) => (
+              
+              {/* Se expandido, mostra as SUBCATEGORIAS */}
+              {expandedGroups[parentName] && (
+                <ul style={{ listStyleType: 'none', paddingLeft: '20px' }}>
+                  {Object.entries(parentData.subcategories).map(([subName, subProducts]) => (
+                    <li key={`${parentName}-${subName}`} className="subcategory-group">
+                      {/* Cabeçalho da SUBCATEGORIA */}
+                      <div 
+                        className="group-header subcategory-header" 
+                        onClick={() => toggleGroup(`${parentName}-${subName}`)}
+                      >
+                        <span>
+                          {subName === '_direct' ? ' Produtos diretos' : ` ${subName}`}
+                        </span>
+                        <span>{subProducts.length} produtos</span>
+                        <button 
+                          className="botao-expend"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleGroup(`${parentName}-${subName}`);
+                          }}
+                        >
+                          {expandedGroups[`${parentName}-${subName}`] ? "Ocultar" : "Expandir"}
+                        </button>
+                      </div>
+                      
+                      {/* Se expandido, mostra os PRODUTOS */}
+                      {expandedGroups[`${parentName}-${subName}`] && (
+                        <ul className="group-details">
+                          {subProducts.map((product) => (
                     <li key={product.id} className="lista-produtos">
                       {editingProduct === product.id ? (
                         // Formulário de edição
@@ -881,6 +1081,10 @@ const ProductList = () => {
                             </button>
                           </div>
                         </div>
+                      )}
+                    </li>
+                  ))}
+                        </ul>
                       )}
                     </li>
                   ))}

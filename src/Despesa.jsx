@@ -33,6 +33,9 @@ const Despesa = () => {
   const [confirmAddOption, setConfirmAddOption] = useState(false);
   const [confirmDeleteOption, setConfirmDeleteOption] = useState({ show: false, id: null });
   const [expenseFilter, setExpenseFilter] = useState("");
+  const [recentMovements, setRecentMovements] = useState([]);
+  const [showAllMovements, setShowAllMovements] = useState(false);
+  const [showMovementsModal, setShowMovementsModal] = useState(false);
 
   useEffect(() => {
     // Buscar despesas da API quando o componente for montado
@@ -58,6 +61,29 @@ const Despesa = () => {
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  };
+
+  const addMovement = (type, expenseName, amount, description = "") => {
+    const currentMonth = format(selectedMonth, "MM/yyyy");
+    const movement = {
+      id: Date.now(),
+      type, // 'add' ou 'delete'
+      expenseName,
+      amount,
+      description,
+      timestamp: new Date(),
+      month: currentMonth
+    };
+    
+    setRecentMovements(prev => {
+      const filtered = prev.filter(m => m.month === currentMonth);
+      return [movement, ...filtered];
+    });
+  };
+
+  const getFilteredMovements = () => {
+    const currentMonth = format(selectedMonth, "MM/yyyy");
+    return recentMovements.filter(m => m.month === currentMonth);
   };
 
   useEffect(() => {
@@ -91,6 +117,9 @@ const Despesa = () => {
         .then((response) => {
           const updatedExpenses = [...expenses, response.data];
           setExpenses(updatedExpenses);
+          
+          // Registrar movimentação
+          addMovement('add', newExpense, parseFloat(amount), description);
           
           // Nova despesa adicionada - grupo permanece oculto por padrão
           // Usuário pode expandir manualmente se desejar
@@ -233,10 +262,18 @@ const Despesa = () => {
 
   const confirmDeleteExpense = () => {
     const { id } = confirmDelete;
+    const expenseToDelete = expenses.find(e => e.id === id);
+    
     axios
       .delete(`https://api-start-pira.vercel.app/api/despesas/${id}`)
       .then(() => {
         setExpenses(expenses.filter((e) => e.id !== id));
+        
+        // Registrar movimentação
+        if (expenseToDelete) {
+          addMovement('delete', expenseToDelete.nomeDespesa, expenseToDelete.valorDespesa, expenseToDelete.descDespesa);
+        }
+        
         setConfirmDelete({ show: false, id: null });
         setMessage({ show: true, text: "Despesa excluída com sucesso!", type: "success" });
         console.log(`Despesa ${id} excluída com sucesso!`);
@@ -379,6 +416,107 @@ const Despesa = () => {
           Próximo Mês
         </button>
       </div>
+
+      {/* Histórico de Movimentações */}
+      <div className="movements-history" onClick={() => setShowMovementsModal(true)}>
+        <div className="movements-header">
+          <h3 className="movements-title">
+            📊 Movimentações Recentes
+          </h3>
+          <span className="movements-count">
+            {getFilteredMovements().length} {getFilteredMovements().length === 1 ? 'registro' : 'registros'}
+          </span>
+        </div>
+        
+        {getFilteredMovements().length > 0 ? (
+          <div className="movements-list">
+            {getFilteredMovements().slice(0, 5).map((movement) => (
+              <div key={movement.id} className="movement-item">
+                <div className="movement-info">
+                  <div className="movement-name">
+                    {movement.type === 'add' ? '➕' : '❌'} {movement.expenseName}
+                  </div>
+                  <div className="movement-timestamp">
+                    {format(new Date(movement.timestamp), "dd/MM/yyyy 'às' HH:mm")}
+                  </div>
+                </div>
+                <span className="movement-amount">
+                  {formatCurrency(movement.amount)}
+                </span>
+              </div>
+            ))}
+            {getFilteredMovements().length > 5 && (
+              <div className="movements-more">
+                Clique para ver todos os registros
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="movements-empty">
+            Nenhuma movimentação neste mês
+          </div>
+        )}
+      </div>
+
+      {/* Modal de Movimentações */}
+      {showMovementsModal && (
+        <div className="movements-modal-overlay" onClick={() => setShowMovementsModal(false)}>
+          <div className="movements-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="movements-modal-header">
+              <h2 className="movements-modal-title">📊 Histórico de Movimentações</h2>
+              <button className="movements-modal-close" onClick={() => setShowMovementsModal(false)}>
+                ✕
+              </button>
+            </div>
+
+            <div className="movements-modal-info">
+              <span className="movements-modal-month">
+                Mês: {format(selectedMonth, "MMMM yyyy", { locale: ptBR })} - Total: {getFilteredMovements().length} {getFilteredMovements().length === 1 ? 'registro' : 'registros'}
+              </span>
+            </div>
+
+            {getFilteredMovements().length > 0 ? (
+              <div>
+                {getFilteredMovements().map((movement) => (
+                  <div key={movement.id} className={`movement-detail-item ${movement.type}`}>
+                    <div className="movement-detail-header">
+                      <div className="movement-detail-left">
+                        <div className="movement-detail-type">
+                          <span className="movement-detail-icon">
+                            {movement.type === 'add' ? '➕' : '❌'}
+                          </span>
+                          <span className={`movement-detail-label ${movement.type}`}>
+                            {movement.type === 'add' ? 'INCLUSÃO' : 'EXCLUSÃO'}
+                          </span>
+                        </div>
+                        <div className="movement-detail-name">
+                          {movement.expenseName}
+                        </div>
+                        {movement.description && (
+                          <div className="movement-detail-description">
+                            📝 {movement.description}
+                          </div>
+                        )}
+                        <div className="movement-detail-time">
+                          🕐 {format(new Date(movement.timestamp), "dd/MM/yyyy 'às' HH:mm:ss")}
+                        </div>
+                      </div>
+                      <div className={`movement-detail-amount ${movement.type}`}>
+                        {movement.type === 'add' ? '+' : '-'} {formatCurrency(movement.amount)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="movements-empty-state">
+                <div className="movements-empty-icon">📭</div>
+                <p className="movements-empty-text">Nenhuma movimentação registrada neste mês</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div
         className="input-group-desp"

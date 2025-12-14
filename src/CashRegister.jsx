@@ -77,6 +77,30 @@ const CashRegister = () => {
     carregarValorMaquina();
   }, [selectedWeek, selectedMonth]);
 
+  // Carrega valores de máquina de TODAS as semanas do mês
+  useEffect(() => {
+    const carregarTodosValoresMaquina = async () => {
+      const weeklyBalances = calculateWeeklyBalances(selectedMonth);
+      const year = selectedMonth.getFullYear();
+      const month = selectedMonth.getMonth() + 1;
+      
+      const novosValores = {};
+      
+      for (let i = 0; i < weeklyBalances.length; i++) {
+        try {
+          const res = await axios.get(`https://api-start-pira.vercel.app/api/machine-week-value?year=${year}&month=${month}&week=${i + 1}`);
+          novosValores[i] = res.data[0]?.value || 0;
+        } catch (err) {
+          novosValores[i] = 0;
+        }
+      }
+      
+      setValorMaquinaSemana(novosValores);
+    };
+
+    carregarTodosValoresMaquina();
+  }, [selectedMonth, balances]);
+
   const handleConfirm = () => {
     const cardValue = parseFloat(card) || 0;
     const cashValue = parseFloat(cash) || 0;
@@ -323,6 +347,13 @@ const CashRegister = () => {
         borderWidth: 1,
       },
       {
+        label: "Valor Máquina Semanal",
+        data: monthlyBalances.map((balance, index) => valorMaquinaSemana[index] || 0),
+        backgroundColor: "rgba(255, 159, 64, 0.2)",
+        borderColor: "rgba(255, 159, 64, 1)",
+        borderWidth: 1,
+      },
+      {
         label: "Saldo Final Semanal",
         data: monthlyBalances.map((balance) => balance.totalBalancefim),
         backgroundColor: "rgba(153, 102, 255, 0.2)",
@@ -377,13 +408,27 @@ const CashRegister = () => {
 
   const totalLucroMes = monthlyBalances.reduce((acc, balance) => acc + balance.totalLucro, 0);
 
-  // Ordenar os registros por data (da mais atual para a mais antiga)
-  const sortedBalances = [...balances]
+  // Filtrar registros do mês selecionado
+  const monthBalances = [...balances]
     .filter((balance) => {
       const balanceDate = parseISO(balance.date);
       return balanceDate >= startOfMonth(selectedMonth) && balanceDate <= endOfMonth(selectedMonth);
-    })
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+    });
+
+  // Agrupar registros por semana com ordem crescente
+  const groupedByWeek = weeklyBalances.map((weekInfo, weekIndex) => {
+    const weekBalances = monthBalances
+      .filter((balance) => {
+        const balanceDate = parseISO(balance.date);
+        return balanceDate >= weekInfo.start && balanceDate <= weekInfo.end;
+      })
+      .sort((a, b) => new Date(a.date) - new Date(b.date)); // Ordem crescente (menor para maior)
+    
+    return {
+      weekLabel: weekInfo.week,
+      balances: weekBalances
+    };
+  }).filter(group => group.balances.length > 0); // Remove semanas sem registros
 
   // Calcular o valor total da máquina na semana selecionada
   const totalValorMaquinaSemana = valorMaquinaSemana[selectedWeek] || 0;
@@ -402,59 +447,35 @@ const CashRegister = () => {
         <label className="desc-text">Dinheiro</label>
         <input type="number" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="Valor em dinheiro" />
       </div>
-      <div className="input-cash">
+            <div className="input-cash">
         <label className="desc-text">Data</label>
+      </div>
+      <div className="date-selector">
+        <button onClick={() => {
+          const newDate = new Date(date);
+          newDate.setMonth(newDate.getMonth() - 1);
+          setDate(newDate.toISOString().split("T")[0]);
+        }}>&lt;&lt; Mês</button>
+        <button onClick={() => {
+          const newDate = new Date(date);
+          newDate.setDate(newDate.getDate() - 1);
+          setDate(newDate.toISOString().split("T")[0]);
+        }}>&lt; Dia</button>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <button onClick={() => {
+          const newDate = new Date(date);
+          newDate.setDate(newDate.getDate() + 1);
+          setDate(newDate.toISOString().split("T")[0]);
+        }}>&gt; Dia</button>
+        <button onClick={() => {
+          const newDate = new Date(date);
+          newDate.setMonth(newDate.getMonth() + 1);
+          setDate(newDate.toISOString().split("T")[0]);
+        }}>&gt;&gt; Mês</button>
       </div>
       <button onClick={handleConfirm} className="confirm-button">
         Confirmar
       </button>
-      {balances.length > 0 && (
-        <div className="balance-list">
-          <h3 className="saldo">Saldo Caixa</h3>
-          <ul>
-{sortedBalances.map((entry, index) => (
-  <li className="registro" key={index}>
-    <span className="balance-value">
-      {format(parseISO(entry.date), "eee - dd/MM", { locale: ptBR })}: 
-      <span className="balance-amount">{formatCurrency(entry.balance)}</span>
-    </span>
-    
-    <div className="input-container-cx">
-      <label className="desc-text-label">Valor Final Dinheiro</label>
-      <input
-        className="final-caixa"
-        type="text"
-        value={dinheirofimcaixa[entry.id] || ""}
-        onChange={(e) => setDinheirofimcaixa({ ...dinheirofimcaixa, [entry.id]: e.target.value })}
-        placeholder="Final caixa dinheiro"
-      />
-    </div>
-    
-    <div className="input-container-cx">
-      <label className="desc-text-label">Valor Final Cartão</label>
-      <input
-        className="final-caixa"
-        type="text"
-        value={cartaofimcaixa[entry.id] || ""}
-        onChange={(e) => setCartaofimcaixa({ ...cartaofimcaixa, [entry.id]: e.target.value })}
-        placeholder="Final caixa cartão"
-      />
-    </div>
-
-    <div className="button-group-cx">
-      <button onClick={() => handleUpdateBalance(entry.id)} className="update-button-cx">
-        Atualizar
-      </button>
-      <button onClick={() => handleDeleteBalance(entry.id)} className="delete-button-cx">
-        Excluir
-      </button>
-    </div>
-  </li>
-))}
-          </ul>
-        </div>
-      )}
       {showMessage && <Message message="Saldo de caixa atualizado com sucesso!" type="success" onClose={() => setShowMessage(false)} />}
       {confirmDelete.show && <Message message="Tem certeza que deseja excluir este saldo?" type="warning" onClose={cancelDeleteBalance} onConfirm={confirmDeleteBalance} />}
       <div className="tabs">
@@ -483,12 +504,61 @@ const CashRegister = () => {
                 key={index}
                 onClick={() => setSelectedWeek(index)}
                 className={selectedWeek === index ? "active" : ""}
-                style={selectedWeek === index ? { backgroundColor: "#022448" } : {}}
               >
                 {week.week}
               </button>
             ))}
           </div>
+
+          {/* Lista de registros da semana selecionada */}
+          {weeklyBalances[selectedWeek]?.balances.length > 0 && (
+            <div className="balance-list">
+              <h3 className="saldo">Registros da Semana</h3>
+              <ul>
+                {weeklyBalances[selectedWeek].balances.map((entry) => (
+                  <li className="registro" key={entry.id}>
+                    <span className="balance-value">
+                      {format(parseISO(entry.date), "eee - dd/MM", { locale: ptBR })}: 
+                      <span className="balance-amount">{formatCurrency(entry.balance)}</span>
+                    </span>
+                    
+                    <div className="input-container-cx">
+                      <label className="desc-text-label">Valor Final Dinheiro</label>
+                      <input
+                        className="final-caixa"
+                        type="text"
+                        value={dinheirofimcaixa[entry.id] || ""}
+                        onChange={(e) => setDinheirofimcaixa({ ...dinheirofimcaixa, [entry.id]: e.target.value })}
+                        placeholder="Final caixa dinheiro"
+                      />
+                    </div>
+                    
+                    <div className="input-container-cx">
+                      <label className="desc-text-label">Valor Final Cartão</label>
+                      <input
+                        className="final-caixa"
+                        type="text"
+                        value={cartaofimcaixa[entry.id] || ""}
+                        onChange={(e) => setCartaofimcaixa({ ...cartaofimcaixa, [entry.id]: e.target.value })}
+                        placeholder="Final caixa cartão"
+                      />
+                    </div>
+
+                    <div className="button-group-cx">
+                      <button onClick={() => handleUpdateBalance(entry.id)} className="update-button-cx">
+                        Atualizar
+                      </button>
+                      <button onClick={() => handleDeleteBalance(entry.id)} className="delete-button-cx">
+                        Excluir
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Campos da máquina e gráfico abaixo dos registros */}
           <div style={{ margin: "12px 0", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
             <label style={{ color: "#fff", marginRight: 8 }}>Valor Máquina Semana:</label>
             <input
@@ -506,9 +576,7 @@ const CashRegister = () => {
             <button
               style={{ background: "#0078d4", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}
               onClick={async () => {
-                // Calcule o ano, mês e semana do selectedWeek
                 const weekInfo = weeklyBalances[selectedWeek];
-                // Exemplo: extraia o primeiro dia da semana
                 const weekStart = weekInfo.balances[0]?.date;
                 if (!weekStart) return alert("Semana inválida");
                 const dateObj = new Date(weekStart);
@@ -519,7 +587,6 @@ const CashRegister = () => {
                 try {
                   await axios.post("https://api-start-pira.vercel.app/api/machine-week-value", { year, month, week, value });
                   setShowMessage(true);
-
                   setTimeout(() => {
                     setShowMessage(false);
                   }, 3000);
@@ -543,12 +610,67 @@ const CashRegister = () => {
       {activeTab === "monthly" && (
         <div className="tab-content">
           <h3>Saldo Mensal</h3>
+          
+          {/* Lista de todos os registros do mês agrupados por semana */}
+          {weeklyBalances.map((weekInfo, weekIndex) => (
+            <div key={weekIndex}>
+              <strong style={{ display: "block", margin: "20px 0 10px", color: "#fff", fontSize: "1.1em", textAlign: "center" }}>
+                {weekInfo.week}
+              </strong>
+              {weekInfo.balances.length > 0 ? (
+                <ul className="balance-list-mensal">
+                  {weekInfo.balances.map((entry) => (
+                    <li className="registro" key={entry.id}>
+                      <span className="balance-value">
+                        {format(parseISO(entry.date), "eee - dd/MM", { locale: ptBR })}: 
+                        <span className="balance-amount">{formatCurrency(entry.balance)}</span>
+                      </span>
+                      
+                      <div className="input-container-cx">
+                        <label className="desc-text-label">Valor Final Dinheiro</label>
+                        <input
+                          className="final-caixa"
+                          type="text"
+                          value={dinheirofimcaixa[entry.id] || ""}
+                          onChange={(e) => setDinheirofimcaixa({ ...dinheirofimcaixa, [entry.id]: e.target.value })}
+                          placeholder="Final caixa dinheiro"
+                        />
+                      </div>
+                      
+                      <div className="input-container-cx">
+                        <label className="desc-text-label">Valor Final Cartão</label>
+                        <input
+                          className="final-caixa"
+                          type="text"
+                          value={cartaofimcaixa[entry.id] || ""}
+                          onChange={(e) => setCartaofimcaixa({ ...cartaofimcaixa, [entry.id]: e.target.value })}
+                          placeholder="Final caixa cartão"
+                        />
+                      </div>
+
+                      <div className="button-group-cx">
+                        <button onClick={() => handleUpdateBalance(entry.id)} className="update-button-cx">
+                          Atualizar
+                        </button>
+                        <button onClick={() => handleDeleteBalance(entry.id)} className="delete-button-cx">
+                          Excluir
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: "#fff", textAlign: "center" }}>Nenhum registro nesta semana</p>
+              )}
+            </div>
+          ))}
+          
           <div style={{ margin: "8px 0", color: "#fff", textAlign: "center" }}>
             <strong>Valor Total Máquina Mês:</strong> {formatCurrency(totalValorMaquinaMes)}
           </div>
           <div className="grafico-mes">
             <Bar data={mesData} options={chartOptions} plugins={[ChartDataLabels]} />
-            <span className="total-lucro-semana">Lucro Total do Mês: {formatCurrency(totalLucroMes)}</span>
+            <span className="total-lucro-semana">Lucro Total do Mês: {formatCurrency(totalLucroMes + totalValorMaquinaMes)}</span>
           </div>
         </div>
       )}

@@ -29,11 +29,16 @@ const Pessoal = () => {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSave, setIsLoadingSave] = useState(false);
-  const [viewFilter, setViewFilter] = useState("TODOS"); // TODOS, GASTOS, GANHOS
+  const [viewFilter, setViewFilter] = useState("GASTOS_FIXOS"); // GASTOS_FIXOS, GASTOS_VARIAVEIS, GANHOS
   
   // Estados para o gráfico interativo
-  const [chartMode, setChartMode] = useState("overview"); // "overview" ou "detailed"
+  const [chartMode, setChartMode] = useState("overview"); // "overview", "detailed" ou "micro"
   const [selectedChartType, setSelectedChartType] = useState(null); // "GASTO" ou "GANHO"
+  const [selectedChartCategory, setSelectedChartCategory] = useState(null); // Categoria selecionada para modo micro
+  
+  // Estados para modal de período fixo
+  const [showFixedPeriodModal, setShowFixedPeriodModal] = useState(false);
+  const [fixedPeriodMonths, setFixedPeriodMonths] = useState(12);
   
   // Estados para categorias
   const [categories, setCategories] = useState([]);
@@ -127,6 +132,7 @@ const Pessoal = () => {
         .then((response) => {
           let updatedExpenses = [...expenses, response.data];
           setExpenses(updatedExpenses);
+          const gastoId = response.data.id;
           
           // Se for GASTO e tiver VALE marcado, criar registro de VALE como GANHO
           if (tipoMovimento === "GASTO" && isVale) {
@@ -138,6 +144,7 @@ const Pessoal = () => {
               DespesaFixa: false,
               tipoMovimento: "GANHO",
               categoriaId: categoryId,
+              valeRelacionadoId: gastoId, // Relacionar VALE ao GASTO
             };
             
             axios
@@ -145,6 +152,23 @@ const Pessoal = () => {
               .then((valeResponse) => {
                 setExpenses((prevExpenses) => [...prevExpenses, valeResponse.data]);
                 console.log("VALE adicionado automaticamente:", valeResponse.data);
+                
+                // Atualizar o GASTO com o ID do VALE relacionado
+                axios
+                  .put(`https://api-start-pira.vercel.app/api/desp-pessoal/${gastoId}`, {
+                    valeRelacionadoId: valeResponse.data.id,
+                  })
+                  .then(() => {
+                    // Atualizar estado local com a relação
+                    setExpenses((prevExpenses) =>
+                      prevExpenses.map((exp) =>
+                        exp.id === gastoId ? { ...exp, valeRelacionadoId: valeResponse.data.id } : exp
+                      )
+                    );
+                  })
+                  .catch((error) => {
+                    console.error("Erro ao atualizar valeRelacionadoId:", error);
+                  });
               })
               .catch((error) => {
                 console.error("Erro ao adicionar VALE:", error);
@@ -166,18 +190,18 @@ const Pessoal = () => {
           console.log("Despesa pessoal adicionada:", response.data);
           setTimeout(() => setMessage(null), 3000);
 
-          // Se a despesa for fixa, criar registros para os meses restantes do ano
+          // Se a despesa for fixa, criar registros para os próximos meses baseado no período escolhido
           if (isFixed) {
             const currentMonth = new Date(date);
             let nextMonth = addMonths(currentMonth, 1);
-            const endOfYearDate = endOfYear(currentMonth);
+            let monthsCreated = 0;
 
-            while (nextMonth <= endOfYearDate) {
+            while (monthsCreated < fixedPeriodMonths) {
               const secondDayOfNextMonth = addDays(startOfMonth(nextMonth), 1);
               const futureExpenseData = {
                 nomeDespesa: newExpense,
-                valorDespesa: 0,
-                descDespesa: null,
+                valorDespesa: parseFloat(amount),
+                descDespesa: description.trim() !== "" ? description : null,
                 date: format(secondDayOfNextMonth, "yyyy-MM-dd HH:mm:ss"),
                 DespesaFixa: isFixed,
                 tipoMovimento,
@@ -194,7 +218,11 @@ const Pessoal = () => {
                 });
 
               nextMonth = addMonths(nextMonth, 1);
+              monthsCreated++;
             }
+            
+            // Resetar o período para o padrão
+            setFixedPeriodMonths(12);
           }
         })
         .catch((error) => {
@@ -362,14 +390,41 @@ const Pessoal = () => {
 
   const confirmDeleteExpense = () => {
     const { id } = confirmDelete;
+    const expenseToDelete = expenses.find((e) => e.id === id);
+    const relatedId = expenseToDelete?.valeRelacionadoId;
+    
+    // Primeiro, excluir o registro principal
     axios
       .delete(`https://api-start-pira.vercel.app/api/desp-pessoal/${id}`)
       .then(() => {
-        setExpenses(expenses.filter((e) => e.id !== id));
-        setConfirmDelete({ show: false, id: null });
-        setMessage({ show: true, text: "Despesa pessoal excluída com sucesso!", type: "success" });
-        console.log(`Despesa pessoal ${id} excluída com sucesso!`);
-        setTimeout(() => setMessage(null), 3000);
+        // Se existir um registro relacionado, excluí-lo também
+        if (relatedId) {
+          axios
+            .delete(`https://api-start-pira.vercel.app/api/desp-pessoal/${relatedId}`)
+            .then(() => {
+              // Remover ambos os registros do estado
+              setExpenses(expenses.filter((e) => e.id !== id && e.id !== relatedId));
+              setConfirmDelete({ show: false, id: null });
+              setMessage({ show: true, text: "Despesa e VALE relacionado excluídos com sucesso!", type: "success" });
+              console.log(`Despesa ${id} e VALE ${relatedId} excluídos com sucesso!`);
+              setTimeout(() => setMessage(null), 3000);
+            })
+            .catch((error) => {
+              console.error("Erro ao excluir VALE relacionado:", error);
+              // Mesmo se falhar a exclusão do VALE, removemos o GASTO do estado
+              setExpenses(expenses.filter((e) => e.id !== id));
+              setConfirmDelete({ show: false, id: null });
+              setMessage({ show: true, text: "Despesa excluída, mas erro ao excluir VALE relacionado!", type: "warning" });
+              setTimeout(() => setMessage(null), 3000);
+            });
+        } else {
+          // Sem registro relacionado, apenas remover o registro principal
+          setExpenses(expenses.filter((e) => e.id !== id));
+          setConfirmDelete({ show: false, id: null });
+          setMessage({ show: true, text: "Despesa pessoal excluída com sucesso!", type: "success" });
+          console.log(`Despesa pessoal ${id} excluída com sucesso!`);
+          setTimeout(() => setMessage(null), 3000);
+        }
       })
       .catch((error) => {
         setMessage({ show: true, text: "Erro ao excluir despesa pessoal!", type: "error" });
@@ -389,6 +444,7 @@ const Pessoal = () => {
     // Resetar gráfico para visão geral ao mudar de mês
     setChartMode("overview");
     setSelectedChartType(null);
+    setSelectedChartCategory(null);
   };
 
   const filteredExpenses = expenses.filter(
@@ -396,8 +452,16 @@ const Pessoal = () => {
       const expenseDate = addDays(parseISO(expense.date), 1);
       const dateMatch = expenseDate.getMonth() === selectedMonth.getMonth() && expenseDate.getFullYear() === selectedMonth.getFullYear();
       
-      if (viewFilter === "TODOS") return dateMatch;
-      return dateMatch && expense.tipoMovimento === viewFilter;
+      if (viewFilter === "GASTOS_FIXOS") {
+        return dateMatch && expense.tipoMovimento === "GASTO" && expense.DespesaFixa === true;
+      }
+      if (viewFilter === "GASTOS_VARIAVEIS") {
+        return dateMatch && expense.tipoMovimento === "GASTO" && expense.DespesaFixa === false;
+      }
+      if (viewFilter === "GANHOS") {
+        return dateMatch && expense.tipoMovimento === "GANHO";
+      }
+      return dateMatch;
     }
   );
 
@@ -526,6 +590,14 @@ const Pessoal = () => {
       
       setSelectedChartType(clickedType);
       setChartMode("detailed");
+    } else if (elements.length > 0 && chartMode === "detailed") {
+      // Clicou em uma categoria específica
+      const clickedIndex = elements[0].index;
+      const categoryData = getDataByCategory(selectedChartType);
+      const categoryName = Object.keys(categoryData)[clickedIndex];
+      
+      setSelectedChartCategory(categoryName);
+      setChartMode("micro");
     }
   };
 
@@ -533,6 +605,13 @@ const Pessoal = () => {
   const handleBackToOverview = () => {
     setChartMode("overview");
     setSelectedChartType(null);
+    setSelectedChartCategory(null);
+  };
+
+  // Função para voltar ao modo detalhado (categorias)
+  const handleBackToDetailed = () => {
+    setChartMode("detailed");
+    setSelectedChartCategory(null);
   };
 
   // Dados dinâmicos do gráfico baseado no modo
@@ -553,7 +632,7 @@ const Pessoal = () => {
           },
         ],
       };
-    } else {
+    } else if (chartMode === "detailed") {
       // Modo detalhado por categoria
       const categoryData = getDataByCategory(selectedChartType);
       const labels = Object.keys(categoryData);
@@ -575,6 +654,12 @@ const Pessoal = () => {
             borderWidth: 1,
           },
         ],
+      };
+    } else {
+      // Modo micro - sem gráfico, retorna vazio
+      return {
+        labels: [],
+        datasets: [],
       };
     }
   };
@@ -621,8 +706,8 @@ const Pessoal = () => {
       },
     };
 
-    // Adicionar funcionalidade de clique apenas no modo overview
-    if (chartMode === "overview") {
+    // Adicionar funcionalidade de clique nos modos overview e detailed
+    if (chartMode === "overview" || chartMode === "detailed") {
       baseOptions.onClick = handleChartClick;
     }
 
@@ -649,20 +734,20 @@ const Pessoal = () => {
 
       <div className="pessoal-view-filter">
         <button 
-          className={`pessoal-filter-btn ${viewFilter === "TODOS" ? "active" : ""}`}
-          onClick={() => setViewFilter("TODOS")}
+          className={`pessoal-filter-btn ${viewFilter === "GASTOS_FIXOS" ? "active" : ""}`}
+          onClick={() => setViewFilter("GASTOS_FIXOS")}
         >
-          Todos
+          Gastos Fixos ({allGastos.filter(g => g.DespesaFixa === true).length})
         </button>
         <button 
-          className={`pessoal-filter-btn ${viewFilter === "GASTO" ? "active" : ""}`}
-          onClick={() => setViewFilter("GASTO")}
+          className={`pessoal-filter-btn ${viewFilter === "GASTOS_VARIAVEIS" ? "active" : ""}`}
+          onClick={() => setViewFilter("GASTOS_VARIAVEIS")}
         >
-          Gastos ({allGastos.length})
+          Gastos Variáveis ({allGastos.filter(g => g.DespesaFixa === false).length})
         </button>
         <button 
-          className={`pessoal-filter-btn ${viewFilter === "GANHO" ? "active" : ""}`}
-          onClick={() => setViewFilter("GANHO")}
+          className={`pessoal-filter-btn ${viewFilter === "GANHOS" ? "active" : ""}`}
+          onClick={() => setViewFilter("GANHOS")}
         >
           Ganhos ({allGanhos.length})
         </button>
@@ -676,6 +761,41 @@ const Pessoal = () => {
           }
         }}
       >
+        {showFixedPeriodModal && (
+          <div className="pessoal-modal">
+            <div className="pessoal-modal-content">
+              <h3 className="pessoal-modal-title">Período da Despesa Fixa</h3>
+              <p style={{ marginBottom: "15px", color: "#666", fontSize: "14px" }}>
+                Por quantos meses esta despesa será fixa?
+              </p>
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+                  Número de meses:
+                </label>
+                <input 
+                  className="pessoal-modal-input" 
+                  type="number" 
+                  min="1"
+                  max="12"
+                  value={fixedPeriodMonths} 
+                  onChange={(e) => setFixedPeriodMonths(parseInt(e.target.value) || 1)} 
+                  placeholder="Digite o número de meses (1-12)" 
+                />
+                <small style={{ display: "block", marginTop: "5px", color: "#888" }}>
+                  A despesa será criada para os próximos {fixedPeriodMonths} meses
+                </small>
+              </div>
+              <div className="pessoal-modal-buttons">
+                <button onClick={() => setShowFixedPeriodModal(false)}>Confirmar</button>
+                <button onClick={() => {
+                  setShowFixedPeriodModal(false);
+                  setIsFixed(false);
+                }}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {isCategoryModalAdd && (
           <div className="pessoal-modal">
             <div className="pessoal-modal-content">
@@ -837,12 +957,36 @@ const Pessoal = () => {
         </div>
 
         <div className="pessoal-select-container">
-          <select className="pessoal-input-field-small" value={tipoMovimento} onChange={(e) => setTipoMovimento(e.target.value)}>
+          <select 
+            className="pessoal-input-field-small" 
+            value={tipoMovimento} 
+            onChange={(e) => setTipoMovimento(e.target.value)}
+            style={{
+              backgroundColor: tipoMovimento === "GASTO" ? "#ffebee" : "#e8f5e9",
+              borderColor: tipoMovimento === "GASTO" ? "#ef5350" : "#66bb6a",
+              borderWidth: "2px"
+            }}
+          >
             <option value="GASTO">Gasto</option>
             <option value="GANHO">Ganho</option>
           </select>
           
-          <select className="pessoal-input-field-small" value={isFixed} onChange={(e) => setIsFixed(e.target.value === "true")}>
+          <select 
+            className="pessoal-input-field-small" 
+            value={isFixed} 
+            onChange={(e) => {
+              const newValue = e.target.value === "true";
+              if (newValue) {
+                setShowFixedPeriodModal(true);
+              }
+              setIsFixed(newValue);
+            }}
+            style={{
+              backgroundColor: isFixed ? "#fff3e0" : "#e3f2fd",
+              borderColor: isFixed ? "#ff9800" : "#2196f3",
+              borderWidth: "2px"
+            }}
+          >
             <option value="false">Variável</option>
             <option value="true">Fixa</option>
           </select>
@@ -867,27 +1011,46 @@ const Pessoal = () => {
       <ul className="pessoal-expense-list">
         {Object.entries(groupedExpenses).length > 0 ? (
           <>
-            {viewFilter !== "TODOS" && (
-              <div className="pessoal-filter-indicator">
-                <span>Mostrando apenas: <strong>{viewFilter === "GASTO" ? "Gastos" : "Ganhos"}</strong></span>
-                <button onClick={() => setViewFilter("TODOS")} className="pessoal-clear-filter">
-                  Mostrar Todos
-                </button>
-              </div>
-            )}
             {Object.entries(groupedExpenses)
               .sort(([a], [b]) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
               .map(([description, group]) => (
               <li key={description} className="pessoal-expense-group">
                 <div className="pessoal-group-header" onClick={() => toggleGroup(description)}>
-                  <span>{description}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span>{description}</span>
+                    {group[0] && (
+                      <span style={{
+                        fontSize: "10px",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        backgroundColor: group[0].tipoMovimento === "GASTO" 
+                          ? (group[0].DespesaFixa ? "#ff9800" : "#2196f3")
+                          : "#4caf50",
+                        color: "white",
+                        fontWeight: "bold"
+                      }}>
+                        {group[0].tipoMovimento === "GASTO" 
+                          ? (group[0].DespesaFixa ? "FIXO" : "VARIÁVEL")
+                          : "GANHO"}
+                      </span>
+                    )}
+                  </div>
                   <span>Total: {formatCurrency(group.reduce((sum, expense) => sum + expense.valorDespesa, 0))}</span>
                   <button className="pessoal-expand-btn">{expandedGroups[description] ? "Ocultar" : "Expandir"}</button>
                 </div>
                 {expandedGroups[description] && (
                   <ul className="pessoal-group-details">
                     {group.map((expense) => (
-                      <li key={expense.id} className="pessoal-expense-item">
+                      <li 
+                        key={expense.id} 
+                        className="pessoal-expense-item"
+                        style={{
+                          borderLeft: expense.tipoMovimento === "GASTO" 
+                            ? (expense.DespesaFixa ? "4px solid #ff9800" : "4px solid #2196f3")
+                            : "4px solid #4caf50",
+                          
+                        }}
+                      >
                         {editExpenseId === expense.id ? (
                           <div className="pessoal-edit-form">
                             <div className="pessoal-edit-field">
@@ -966,7 +1129,12 @@ const Pessoal = () => {
                           <div className="pessoal-expense-info">
                             <span className="pessoal-expense-name">{expense.nomeDespesa}</span>
                             <span className="pessoal-expense-date">{format(addDays(parseISO(expense.date), 1), "dd/MM/yyyy", { locale: ptBR })}</span>
-                            <span className="pessoal-expense-category">{expense.categoria?.nomeCategoria || "Sem categoria"}</span>
+                            <span className="pessoal-expense-category" title={expense.categoria?.nomeCategoria || "Sem categoria"}>{expense.categoria?.nomeCategoria || "Sem categoria"}</span>
+                            {expense.descDespesa && (
+                              <span className="pessoal-expense-description" title={expense.descDespesa}>
+                                {expense.descDespesa}
+                              </span>
+                            )}
                             <span className="pessoal-expense-amount" 
                                   style={{ color: expense.tipoMovimento === "GANHO" ? "#28a745" : "#dc3545" }}>
                               {expense.tipoMovimento === "GANHO" ? "+" : "-"}{formatCurrency(expense.valorDespesa)}
@@ -993,9 +1161,11 @@ const Pessoal = () => {
           </>
         ) : (
           <li className="pessoal-no-expenses">
-            {viewFilter === "TODOS" 
-              ? "Nenhuma despesa encontrada para este mês"
-              : `Nenhum ${viewFilter.toLowerCase()} encontrado para este mês`
+            {viewFilter === "GASTOS_FIXOS" 
+              ? "Nenhum gasto fixo encontrado para este mês"
+              : viewFilter === "GASTOS_VARIAVEIS"
+              ? "Nenhum gasto variável encontrado para este mês"
+              : "Nenhum ganho encontrado para este mês"
             }
           </li>
         )}
@@ -1016,11 +1186,74 @@ const Pessoal = () => {
             </h3>
           </div>
         )}
-        <Bar data={getDynamicChartData()} options={getDynamicChartOptions()} plugins={[ChartDataLabels]} />
-        {chartMode === "overview" && (
-          <p className="pessoal-chart-hint">
-            💡 Clique nas barras para ver detalhes por categoria
-          </p>
+        {chartMode === "micro" && (
+          <div className="pessoal-chart-header">
+            <button className="pessoal-back-btn" onClick={handleBackToDetailed}>
+              ← Voltar às Categorias
+            </button>
+            <h3 className="pessoal-chart-title">
+              Detalhes: {selectedChartCategory}
+            </h3>
+          </div>
+        )}
+        
+        {chartMode !== "micro" ? (
+          <>
+            <Bar data={getDynamicChartData()} options={getDynamicChartOptions()} plugins={[ChartDataLabels]} />
+            {chartMode === "overview" && (
+              <p className="pessoal-chart-hint">
+                💡 Clique nas barras para ver detalhes por categoria
+              </p>
+            )}
+            {chartMode === "detailed" && (
+              <p className="pessoal-chart-hint">
+                💡 Clique em uma categoria para ver todos os registros
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="pessoal-micro-details">
+            {expenses
+              .filter(exp => {
+                const expenseDate = parseISO(exp.date);
+                const isMonthMatch = expenseDate.getMonth() === selectedMonth.getMonth() && 
+                                     expenseDate.getFullYear() === selectedMonth.getFullYear();
+                const categoryName = exp.categoria?.nomeCategoria || "Sem categoria";
+                const isTypeMatch = exp.tipoMovimento === selectedChartType;
+                return isMonthMatch && categoryName === selectedChartCategory && isTypeMatch;
+              })
+              .sort((a, b) => new Date(b.date) - new Date(a.date))
+              .map((expense) => (
+                <div key={expense.id} className="pessoal-micro-item">
+                  <div className="pessoal-micro-row">
+                    <span className="pessoal-micro-label">Nome:</span>
+                    <span className="pessoal-micro-value">{expense.nomeDespesa}</span>
+                  </div>
+                  <div className="pessoal-micro-row">
+                    <span className="pessoal-micro-label">Data:</span>
+                    <span className="pessoal-micro-value">{format(addDays(parseISO(expense.date), 1), "dd/MM/yyyy", { locale: ptBR })}</span>
+                  </div>
+                  <div className="pessoal-micro-row">
+                    <span className="pessoal-micro-label">Valor:</span>
+                    <span className="pessoal-micro-value" style={{ color: expense.tipoMovimento === "GASTO" ? "#dc3545" : "#28a745", fontWeight: "bold" }}>
+                      {formatCurrency(expense.valorDespesa)}
+                    </span>
+                  </div>
+                  {expense.descDespesa && (
+                    <div className="pessoal-micro-row">
+                      <span className="pessoal-micro-label">Descrição:</span>
+                      <span className="pessoal-micro-value">{expense.descDespesa}</span>
+                    </div>
+                  )}
+                  <div className="pessoal-micro-row">
+                    <span className="pessoal-micro-label">Tipo:</span>
+                    <span className="pessoal-micro-value">
+                      {expense.DespesaFixa ? "Fixo" : "Variável"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+          </div>
         )}
       </div>
 

@@ -55,14 +55,6 @@ const ProductList = () => {
     setFilteredProducts(filtered);
   }, [searchTerm, products]);
 
-  // Calcular custo automaticamente: VALOR x QUANTIDADE
-  useEffect(() => {
-    if (value && quantity) {
-      const calculatedCost = parseFloat(value) * parseFloat(quantity);
-      setPrecoCusto(calculatedCost.toFixed(2));
-    }
-  }, [value, quantity]);
-
   const fetchProducts = () => {
     axios
       .get("https://api-start-pira.vercel.app/api/products")
@@ -398,7 +390,6 @@ const ProductList = () => {
           onChange={(e) => setPrecoCusto(e.target.value)}
           placeholder="Custo (R$)"
           disabled={isLoading}
-          title="Calculado automaticamente (Valor x Quantidade), mas pode ser editado"
         />
   
         {/* Campo de seleção de unidades com exclusão */}

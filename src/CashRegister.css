@@ -90,6 +90,27 @@
   margin: 0;
 }
 
+/* Grupo de semana */
+.week-group {
+  margin-bottom: 30px;
+  border: 2px solid rgba(0, 123, 255, 0.3);
+  border-radius: 12px;
+  padding: 15px;
+  background: rgba(0, 123, 255, 0.05);
+}
+
+.week-header {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 15px 0;
+  padding: 10px 15px;
+  background: rgba(0, 123, 255, 0.2);
+  border-radius: 8px;
+  text-align: center;
+  border-left: 4px solid #007bff;
+}
+
 /* Item de registro - Layout horizontal */
 .registro {
   display: flex;
@@ -197,7 +218,7 @@
 }
 
 .delete-button-cx {
-  background-color: #dc3545;
+  background-color: #dc3545 !important;
   color: white;
 }
 
@@ -312,30 +333,62 @@
 .week-selector button {
   padding: 10px 15px;
   border: none;
-  border-radius: 8px;
+  background: transparent;
   cursor: pointer;
   font-weight: 500;
   font-size: 12px;
   transition: all 0.3s ease;
-  background-color: rgba(255, 255, 255, 0.1);
-  
   color: #fff;
   text-align: center;
+  border-bottom: 3px solid transparent;
 }
 
 .week-selector button.active {
-  background: linear-gradient(135deg, #0d29a5 0%, #330363 100%);
+  border-bottom: 3px solid #007bff;
+  font-weight: 700;
 }
 
 .week-selector button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  border-bottom: 3px solid rgba(0, 123, 255, 0.5);
 }
 
-/* Container do gráfico */
-.chart-container,
-.grafico-mes {
+/* Lista de registros semanal */
+.balance-list-semana {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   width: 100%;
   max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Lista de registros mensal - maior para melhor legibilidade */
+.balance-list-mensal {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  max-width: 1400px !important;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Container do gráfico semanal */
+.chart-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 30px auto;
+  padding: 20px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Container do gráfico mensal - maior para melhor legibilidade */
+.grafico-mes {
+  width: 100%;
+  max-width: 1400px;
   margin: 30px auto;
   padding: 20px;
   background-color: rgba(255, 255, 255, 0.05);

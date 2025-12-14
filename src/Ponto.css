@@ -269,3 +269,61 @@ strong {
 p {
   text-shadow: none;
 }
+
+/* Banner de informações do colaborador */
+.employee-info-banner {
+  text-align: center;
+  margin: 20px auto;
+  padding: 12px;
+  background: #007bff;
+  border-radius: 8px;
+  max-width: 600px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.employee-info-title {
+  margin: 0;
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  text-shadow: none;
+}
+
+/* Estilos para resumos de horas e valores */
+.resumo-label {
+  text-align: center;
+  font-weight: bold;
+  background: black;
+  color: #fff;
+}
+
+.resumo-horas {
+  font-weight: bold;
+  background: black;
+  color: #fff;
+}
+
+.resumo-valor {
+  font-weight: bold;
+  background: black;
+  color: #fff;
+  min-width: 80px;
+}
+
+.valor-base {
+  color: #fff;
+  font-size: 14px;
+}
+
+.valor-bonificacao {
+  font-size: 12px;
+  color: #90ee90;
+}
+
+.valor-total {
+  font-size: 13px;
+  color: #90ee90;
+  border-top: 1px solid white;
+  margin-top: 4px;
+  padding-top: 4px;
+}
