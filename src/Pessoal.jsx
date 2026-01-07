@@ -1631,9 +1631,9 @@ const Pessoal = () => {
                               {expense.tipoMovimento === "GANHO" ? "Ganho" : "Gasto"}
                             </span>
                             <div className="pessoal-expense-actions">
-                              <button onClick={() => handleEditExpense(expense)} className="pessoal-edit-btn">
+                              {/* <button onClick={() => handleEditExpense(expense)} className="pessoal-edit-btn">
                                 Editar
-                              </button>
+                              </button> */}
                               <button onClick={() => handleDeleteExpense(expense.id)} className="pessoal-delete-btn">
                                 Excluir
                               </button>
