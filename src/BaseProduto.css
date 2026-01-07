@@ -388,6 +388,43 @@
   background-color: rgba(255, 255, 255, 0.15);
 }
 
+/* Categoria PAI - estilo mais destacado */
+.parent-category-header {
+  background-color: rgba(102, 126, 234, 0.2);
+  border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+}
+
+.parent-category-header:hover {
+  background-color: rgba(102, 126, 234, 0.3);
+}
+
+/* Subcategoria - estilo mais suave */
+.subcategory-header {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding-left: 40px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.subcategory-header:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.subcategory-header .bp-group-title {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Lista de subcategorias */
+.bp-subcategory-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.bp-subgroup {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 .bp-group-title {
   color: #fff;
   font-size: 18px;

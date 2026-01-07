@@ -447,7 +447,7 @@ const CashRegister = () => {
         <label className="desc-text">Dinheiro</label>
         <input type="number" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="Valor em dinheiro" />
       </div>
-            <div className="input-cash">
+      <div className="input-cash">
         <label className="desc-text">Data</label>
       </div>
       <div className="date-selector">

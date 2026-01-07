@@ -1109,7 +1109,7 @@ const handleSaveEdit = () => {
     } catch (error) {
       console.error("Erro ao atualizar funcionário:", error);
       console.error("Dados enviados:", updatedData);
-      setMessage("Erro ao atualizar funcionário.");
+      setMessage({ show: true, text: "Erro ao atualizar funcionário.", type: "error" });
     } finally {
       setTimeout(() => setMessage(""), 3000);
     }

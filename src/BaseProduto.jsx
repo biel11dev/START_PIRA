@@ -79,16 +79,51 @@ const ProductList = () => {
       .catch((error) => console.error("Erro ao buscar categorias:", error));
   };
 
-  // Função para agrupar produtos por categoria
+  // Função para agrupar produtos por categoria hierárquica
   const groupProductsByCategory = (products) => {
-    return products.reduce((groups, product) => {
-      const categoryName = product.category?.name || "Sem Categoria";
-      if (!groups[categoryName]) {
-        groups[categoryName] = [];
+    const hierarchy = {};
+    
+    products.forEach(product => {
+      let parentName = "Sem Categoria";
+      let subcategoryName = null;
+      
+      if (product.category) {
+        if (product.category.parent) {
+          // Produto tem subcategoria
+          parentName = product.category.parent.name;
+          subcategoryName = product.category.name;
+        } else {
+          // Produto tem apenas categoria pai
+          parentName = product.category.name;
+        }
       }
-      groups[categoryName].push(product);
-      return groups;
-    }, {});
+      
+      // Criar categoria pai se não existir
+      if (!hierarchy[parentName]) {
+        hierarchy[parentName] = {
+          totalCount: 0,
+          subcategories: {}
+        };
+      }
+      
+      if (subcategoryName) {
+        // Adicionar à subcategoria
+        if (!hierarchy[parentName].subcategories[subcategoryName]) {
+          hierarchy[parentName].subcategories[subcategoryName] = [];
+        }
+        hierarchy[parentName].subcategories[subcategoryName].push(product);
+      } else {
+        // Adicionar direto à categoria pai (sem subcategoria)
+        if (!hierarchy[parentName].subcategories['_direct']) {
+          hierarchy[parentName].subcategories['_direct'] = [];
+        }
+        hierarchy[parentName].subcategories['_direct'].push(product);
+      }
+      
+      hierarchy[parentName].totalCount++;
+    });
+    
+    return hierarchy;
   };
 
   // Função para alternar expansão de grupos
@@ -435,28 +470,60 @@ const ProductList = () => {
       </div>
 
       <ul className="bp-list">
-        {Object.entries(groupProductsByCategory(filteredProducts)).map(([categoryName, categoryProducts]) => (
-          <li key={categoryName} className="bp-group">
-            <div className="bp-group-header" onClick={() => toggleGroup(categoryName)}>
+        {Object.entries(groupProductsByCategory(filteredProducts)).map(([parentName, parentData]) => (
+          <li key={parentName} className="bp-group">
+            {/* Cabeçalho da categoria PAI */}
+            <div className="bp-group-header parent-category-header" onClick={() => toggleGroup(parentName)}>
               <div className="bp-group-title">
-                <span>{categoryName}</span>
+                <span>📁 {parentName}</span>
               </div>
               <div className="bp-group-info">
-                <span className="bp-group-count">{categoryProducts.length}</span>
+                <span className="bp-group-count">{parentData.totalCount} produtos</span>
                 <button 
                   className="bp-expand-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleGroup(categoryName);
+                    toggleGroup(parentName);
                   }}
                 >
-                  {expandedGroups[categoryName] ? "Ocultar" : "Expandir"}
+                  {expandedGroups[parentName] ? "Ocultar" : "Expandir"}
                 </button>
               </div>
             </div>
-            {expandedGroups[categoryName] && (
-              <ul className="bp-details">
-                {categoryProducts.map((product) => (
+            
+            {/* Se expandido, mostra as SUBCATEGORIAS */}
+            {expandedGroups[parentName] && (
+              <ul className="bp-subcategory-list">
+                {Object.entries(parentData.subcategories).map(([subName, subProducts]) => (
+                  <li key={`${parentName}-${subName}`} className="bp-subgroup">
+                    {/* Cabeçalho da SUBCATEGORIA */}
+                    <div 
+                      className="bp-group-header subcategory-header" 
+                      onClick={() => toggleGroup(`${parentName}-${subName}`)}
+                    >
+                      <div className="bp-group-title">
+                        <span>
+                          {subName === '_direct' ? '📄 Produtos diretos' : `📄 ${subName}`}
+                        </span>
+                      </div>
+                      <div className="bp-group-info">
+                        <span className="bp-group-count">{subProducts.length} produtos</span>
+                        <button 
+                          className="bp-expand-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleGroup(`${parentName}-${subName}`);
+                          }}
+                        >
+                          {expandedGroups[`${parentName}-${subName}`] ? "Ocultar" : "Expandir"}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Se expandido, mostra os PRODUTOS */}
+                    {expandedGroups[`${parentName}-${subName}`] && (
+                      <ul className="bp-details">
+                        {subProducts.map((product) => (
                   <li className="bp-item" key={product.id}>
                 {editingProduct === product.id ? (
                   <div className="bp-edit-form">
@@ -501,9 +568,14 @@ const ProductList = () => {
                       >
                         <option value="">Sem categoria</option>
                         {categories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </option>
+                          <React.Fragment key={cat.id}>
+                            <option value={cat.id}>📁 {cat.name}</option>
+                            {cat.subcategories && cat.subcategories.map((sub) => (
+                              <option key={sub.id} value={sub.id}>
+                                &nbsp;&nbsp;&nbsp;📄 {sub.name}
+                              </option>
+                            ))}
+                          </React.Fragment>
                         ))}
                       </select>
                     </div>
@@ -547,7 +619,12 @@ const ProductList = () => {
                         <span className="bp-info-value">{product.unit}</span>
                       </div>
                       <div className="bp-info-row">
-                        <span className="bp-info-value">{product.category?.name || "Sem categoria"}</span>
+                        <span className="bp-info-value">
+                          {product.category?.parent 
+                            ? `${product.category.parent.name} > ${product.category.name}`
+                            : product.category?.name || "Sem categoria"
+                          }
+                        </span>
                       </div>
                       <div className="bp-info-row">
                         <span className="bp-value-destaquee">{formatCurrency(product.value)}</span>
@@ -569,6 +646,10 @@ const ProductList = () => {
               </li>
             ))}
           </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </li>
         ))}

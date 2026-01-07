@@ -29,7 +29,7 @@ const Pessoal = () => {
   const [expandedGroups, setExpandedGroups] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSave, setIsLoadingSave] = useState(false);
-  const [viewFilter, setViewFilter] = useState("GASTOS_FIXOS"); // GASTOS_FIXOS, GASTOS_VARIAVEIS, GANHOS
+  const [viewFilter, setViewFilter] = useState("TODOS"); // TODOS, GASTOS_FIXOS, GASTOS_VARIAVEIS, GANHOS
   
   // Estados para o gráfico interativo
   const [chartMode, setChartMode] = useState("overview"); // "overview", "detailed" ou "micro"
@@ -39,6 +39,16 @@ const Pessoal = () => {
   // Estados para modal de período fixo
   const [showFixedPeriodModal, setShowFixedPeriodModal] = useState(false);
   const [fixedPeriodMonths, setFixedPeriodMonths] = useState(12);
+  
+  // Estados para modal de seleção de despesa fixa existente
+  const [showFixedExpenseSelectionModal, setShowFixedExpenseSelectionModal] = useState(false);
+  const [existingFixedExpenses, setExistingFixedExpenses] = useState([]);
+  const [selectedExistingExpense, setSelectedExistingExpense] = useState(null);
+  const [isEditingFixedExpense, setIsEditingFixedExpense] = useState(false);
+  
+  // Estados para autocomplete de despesas variáveis
+  const [variableExpenseSuggestions, setVariableExpenseSuggestions] = useState([]);
+  const [showVariableSuggestions, setShowVariableSuggestions] = useState(false);
   
   // Estados para categorias
   const [categories, setCategories] = useState([]);
@@ -52,6 +62,7 @@ const Pessoal = () => {
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState({ show: false, id: null });
   const [categoryFilter, setCategoryFilter] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -109,20 +120,150 @@ const Pessoal = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isCategoryModalOpen]);
 
+  // Função para buscar despesas fixas existentes do mês
+  const fetchExistingFixedExpenses = () => {
+    const fixedExpenses = expenses.filter(expense => {
+      const expenseDate = addDays(parseISO(expense.date), 1);
+      return expenseDate.getMonth() === selectedMonth.getMonth() && 
+             expenseDate.getFullYear() === selectedMonth.getFullYear() &&
+             expense.DespesaFixa === true;
+    });
+    setExistingFixedExpenses(fixedExpenses);
+    setShowFixedExpenseSelectionModal(true);
+  };
+
+  // Função para selecionar despesa fixa existente para ATUALIZAÇÃO
+  const handleSelectExistingFixedExpense = async (expense) => {
+    // Preencher formulário com dados da despesa
+    setNewExpense(expense.nomeDespesa);
+    setAmount(expense.valorDespesa.toString());
+    setDescription(expense.descDespesa || "");
+    setSelectedCategory(expense.categoriaId?.toString() || "");
+    setTipoMovimento(expense.tipoMovimento);
+    setIsVale(expense.isVale || false);
+    
+    // Converter data do formato do banco para formato do input (YYYY-MM-DD)
+    const expenseDate = parseISO(expense.date);
+    const formattedDate = format(expenseDate, "yyyy-MM-dd");
+    setDate(formattedDate);
+    
+    setSelectedExistingExpense(expense);
+    setIsEditingFixedExpense(true);
+    setIsFixed(true);
+    setShowFixedExpenseSelectionModal(false);
+  };
+
+  // Função para criar nova despesa fixa
+  const handleCreateNewFixedExpense = () => {
+    setShowFixedExpenseSelectionModal(false);
+    setIsEditingFixedExpense(false);
+    setSelectedExistingExpense(null);
+    setShowFixedPeriodModal(true);
+  };
+
+  // Função para buscar sugestões de despesas variáveis
+  const getVariableExpenseSuggestions = (searchTerm) => {
+    if (!searchTerm || searchTerm.length < 2) {
+      setVariableExpenseSuggestions([]);
+      setShowVariableSuggestions(false);
+      return;
+    }
+
+    // Buscar despesas variáveis e filtrar por nome
+    const variableExpenses = expenses
+      .filter(expense => 
+        expense.DespesaFixa === false && 
+        expense.nomeDespesa.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    
+    // Criar combinação única de nome+tipo+valor para mostrar variações
+    const uniqueExpenses = [];
+    const seenCombinations = new Set();
+    
+    for (const expense of variableExpenses) {
+      // Criar chave única baseada em nome, tipo e valor
+      const key = `${expense.nomeDespesa}|${expense.tipoMovimento}|${expense.valorDespesa}`;
+      if (!seenCombinations.has(key)) {
+        seenCombinations.add(key);
+        uniqueExpenses.push(expense);
+      }
+    }
+    
+    const filtered = uniqueExpenses.slice(0, 10);
+    
+    setVariableExpenseSuggestions(filtered);
+    setShowVariableSuggestions(filtered.length > 0);
+  };
+
+  // Função para selecionar sugestão de despesa variável
+  const handleSelectVariableSuggestion = (expense) => {
+    setNewExpense(expense.nomeDespesa);
+    setAmount(expense.valorDespesa.toString());
+    setDescription(expense.descDespesa || "");
+    setSelectedCategory(expense.categoriaId?.toString() || "");
+    setTipoMovimento(expense.tipoMovimento);
+    setIsVale(expense.isVale || false);
+    setShowVariableSuggestions(false);
+  };
+
   const handleAddExpense = () => {
     if (newExpense.trim() !== "" && amount.trim() !== "") {
       setIsLoading(true);
       const formattedDate = format(new Date(date), "yyyy-MM-dd HH:mm:ss");
       const categoryId = selectedCategory ? parseInt(selectedCategory) : null;
       
+      // Se estiver editando uma despesa fixa existente, ATUALIZAR em vez de criar
+      if (isEditingFixedExpense && selectedExistingExpense) {
+        const updatedData = {
+          nomeDespesa: newExpense.trim(),
+          valorDespesa: parseFloat(amount),
+          descDespesa: description.trim() !== "" ? description.trim() : null,
+          date: formattedDate,
+          DespesaFixa: isFixed,
+          tipoMovimento,
+          categoriaId: categoryId,
+          isVale: isVale,
+        };
+
+        axios
+          .put(`https://api-start-pira.vercel.app/api/desp-pessoal/${selectedExistingExpense.id}`, updatedData)
+          .then((response) => {
+            setExpenses((prev) => prev.map((exp) => (exp.id === selectedExistingExpense.id ? response.data : exp)));
+            setMessage({ show: true, text: "Despesa fixa atualizada com sucesso!", type: "success" });
+            setTimeout(() => setMessage(null), 3000);
+            
+            // Limpar formulário
+            setNewExpense("");
+            setAmount("");
+            setDescription("");
+            setDate(new Date().toISOString().substr(0, 10));
+            setIsFixed(false);
+            setTipoMovimento("GASTO");
+            setIsVale(false);
+            setSelectedCategory("");
+            setIsEditingFixedExpense(false);
+            setSelectedExistingExpense(null);
+          })
+          .catch((error) => {
+            console.error("Erro ao atualizar despesa fixa:", error);
+            setMessage({ show: true, text: "Erro ao atualizar despesa fixa!", type: "error" });
+            setTimeout(() => setMessage(null), 3000);
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+        return;
+      }
+      
       const newExpenseData = {
-        nomeDespesa: newExpense,
+        nomeDespesa: newExpense.trim(),
         valorDespesa: parseFloat(amount),
-        descDespesa: description.trim() !== "" ? description : null,
+        descDespesa: description.trim() !== "" ? description.trim() : null,
         date: formattedDate,
         DespesaFixa: isFixed,
         tipoMovimento,
         categoriaId: categoryId,
+        isVale: isVale,
       };
 
       console.log("Dados enviados:", newExpenseData);
@@ -452,16 +593,25 @@ const Pessoal = () => {
       const expenseDate = addDays(parseISO(expense.date), 1);
       const dateMatch = expenseDate.getMonth() === selectedMonth.getMonth() && expenseDate.getFullYear() === selectedMonth.getFullYear();
       
+      // Filtro de pesquisa por nome, descrição ou categoria
+      const searchMatch = searchTerm.trim() === "" || 
+        expense.nomeDespesa?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        expense.descDespesa?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        expense.categoria?.nomeCategoria?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (viewFilter === "TODOS") {
+        return dateMatch && searchMatch;
+      }
       if (viewFilter === "GASTOS_FIXOS") {
-        return dateMatch && expense.tipoMovimento === "GASTO" && expense.DespesaFixa === true;
+        return dateMatch && searchMatch && expense.tipoMovimento === "GASTO" && expense.DespesaFixa === true;
       }
       if (viewFilter === "GASTOS_VARIAVEIS") {
-        return dateMatch && expense.tipoMovimento === "GASTO" && expense.DespesaFixa === false;
+        return dateMatch && searchMatch && expense.tipoMovimento === "GASTO" && expense.DespesaFixa === false;
       }
       if (viewFilter === "GANHOS") {
-        return dateMatch && expense.tipoMovimento === "GANHO";
+        return dateMatch && searchMatch && expense.tipoMovimento === "GANHO";
       }
-      return dateMatch;
+      return dateMatch && searchMatch;
     }
   );
 
@@ -655,13 +805,51 @@ const Pessoal = () => {
           },
         ],
       };
-    } else {
-      // Modo micro - sem gráfico, retorna vazio
+    } else if (chartMode === "micro") {
+      // Modo micro - gráfico por dia
+      const microExpenses = expenses
+        .filter(exp => {
+          const expenseDate = parseISO(exp.date);
+          const isMonthMatch = expenseDate.getMonth() === selectedMonth.getMonth() && 
+                               expenseDate.getFullYear() === selectedMonth.getFullYear();
+          const categoryName = exp.categoria?.nomeCategoria || "Sem categoria";
+          const isTypeMatch = exp.tipoMovimento === selectedChartType;
+          return isMonthMatch && categoryName === selectedChartCategory && isTypeMatch;
+        })
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      // Agrupar por dia e nome
+      const dayData = {};
+      microExpenses.forEach(exp => {
+        const day = format(addDays(parseISO(exp.date), 1), "dd/MM");
+        const key = `${day} - ${exp.nomeDespesa}`;
+        if (!dayData[key]) {
+          dayData[key] = 0;
+        }
+        dayData[key] += exp.valorDespesa;
+      });
+
+      const labels = Object.keys(dayData);
+      const values = Object.values(dayData);
+      const baseColor = selectedChartType === "GASTO" ? "255, 99, 132" : "75, 192, 192";
+
       return {
-        labels: [],
-        datasets: [],
+        labels: labels,
+        datasets: [
+          {
+            label: selectedChartCategory,
+            data: values,
+            backgroundColor: `rgba(${baseColor}, 0.5)`,
+            borderColor: `rgba(${baseColor}, 1)`,
+            borderWidth: 2,
+          },
+        ],
       };
     }
+    return {
+      labels: [],
+      datasets: [],
+    };
   };
 
   // Opções dinâmicas do gráfico
@@ -732,7 +920,23 @@ const Pessoal = () => {
         </button>
       </div>
 
+      <div className="pessoal-search-bar">
+        <input
+          type="text"
+          placeholder="Pesquisar despesas..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pessoal-search-input"
+        />
+      </div>
+
       <div className="pessoal-view-filter">
+        <button 
+          className={`pessoal-filter-btn ${viewFilter === "TODOS" ? "active" : ""}`}
+          onClick={() => setViewFilter("TODOS")}
+        >
+          Todos ({allGastos.length + allGanhos.length})
+        </button>
         <button 
           className={`pessoal-filter-btn ${viewFilter === "GASTOS_FIXOS" ? "active" : ""}`}
           onClick={() => setViewFilter("GASTOS_FIXOS")}
@@ -761,6 +965,111 @@ const Pessoal = () => {
           }
         }}
       >
+        {/* Modal de seleção de despesa fixa existente */}
+        {showFixedExpenseSelectionModal && (
+          <div className="pessoal-modal">
+            <div className="pessoal-modal-content" style={{ maxWidth: "600px", maxHeight: "80vh", overflowY: "auto" }}>
+              <h3 className="pessoal-modal-title">Atualizar Despesa Fixa Existente</h3>
+              <p style={{ marginBottom: "15px", color: "#666", fontSize: "14px", textShadow: "none" }}>
+                Selecione uma despesa fixa existente para atualizar ou crie uma nova:
+              </p>
+              
+              {existingFixedExpenses.length > 0 ? (
+                <div style={{ marginBottom: "20px" }}>
+                  <div style={{ 
+                    maxHeight: "300px", 
+                    overflowY: "auto", 
+                    border: "1px solid #ddd", 
+                    borderRadius: "8px",
+                    padding: "10px"
+                  }}>
+                    {existingFixedExpenses.map((expense) => (
+                      <div 
+                        key={expense.id}
+                        onClick={() => handleSelectExistingFixedExpense(expense)}
+                        style={{
+                          padding: "12px",
+                          marginBottom: "8px",
+                          border: "2px solid #e0e0e0",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          transition: "all 0.2s",
+                          backgroundColor: "#f9f9f9",
+                          textShadow: "none"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = "#667eea";
+                          e.currentTarget.style.backgroundColor = "#f0f0ff";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = "#e0e0e0";
+                          e.currentTarget.style.backgroundColor = "#f9f9f9";
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <strong style={{ color: "#333", fontSize: "15px" }}>
+                              {expense.nomeDespesa}
+                            </strong>
+                            <div style={{ fontSize: "13px", color: "#666", marginTop: "4px" }}>
+                              {formatCurrency(expense.valorDespesa)} • {expense.categoria?.nomeCategoria || "Sem categoria"}
+                            </div>
+                            {expense.descDespesa && (
+                              <div style={{ fontSize: "12px", color: "#888", marginTop: "2px" }}>
+                                {expense.descDespesa}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{
+                            padding: "4px 12px",
+                            borderRadius: "4px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            backgroundColor: expense.tipoMovimento === "GASTO" ? "#ffebee" : "#e8f5e9",
+                            color: expense.tipoMovimento === "GASTO" ? "#c62828" : "#2e7d32"
+                          }}>
+                            {expense.tipoMovimento}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ 
+                  padding: "20px", 
+                  textAlign: "center", 
+                  color: "#666", 
+                  backgroundColor: "#f5f5f5",
+                  borderRadius: "8px",
+                  marginBottom: "20px",
+                  textShadow: "none"
+                }}>
+                  Nenhuma despesa fixa encontrada neste mês
+                </div>
+              )}
+              
+              <div className="pessoal-modal-buttons">
+                <button 
+                  onClick={handleCreateNewFixedExpense}
+                  style={{
+                    background: "linear-gradient(135deg, #4caf50 0%, #45a049 100%)",
+                    fontWeight: "600"
+                  }}
+                >
+                  ➕ Criar Nova Despesa Fixa
+                </button>
+                <button onClick={() => {
+                  setShowFixedExpenseSelectionModal(false);
+                  setIsFixed(false);
+                }}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showFixedPeriodModal && (
           <div className="pessoal-modal">
             <div className="pessoal-modal-content">
@@ -769,7 +1078,7 @@ const Pessoal = () => {
                 Por quantos meses esta despesa será fixa?
               </p>
               <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold", textShadow: "none" }}>
                   Número de meses:
                 </label>
                 <input 
@@ -781,12 +1090,15 @@ const Pessoal = () => {
                   onChange={(e) => setFixedPeriodMonths(parseInt(e.target.value) || 1)} 
                   placeholder="Digite o número de meses (1-12)" 
                 />
-                <small style={{ display: "block", marginTop: "5px", color: "#888" }}>
+                <small style={{ display: "block", marginTop: "5px", color: "#888", textShadow: "none"  }}>
                   A despesa será criada para os próximos {fixedPeriodMonths} meses
                 </small>
               </div>
               <div className="pessoal-modal-buttons">
-                <button onClick={() => setShowFixedPeriodModal(false)}>Confirmar</button>
+                <button onClick={() => {
+                  setShowFixedPeriodModal(false);
+                  setIsFixed(true);
+                }}>Confirmar</button>
                 <button onClick={() => {
                   setShowFixedPeriodModal(false);
                   setIsFixed(false);
@@ -840,14 +1152,125 @@ const Pessoal = () => {
           </div>
         )}
 
-        <input 
-          className="pessoal-input-field"
-          type="text" 
-          value={newExpense} 
-          onChange={(e) => setNewExpense(e.target.value)} 
-          placeholder="Nome da despesa/ganho" 
-        />
+        {/* 1. Campo Select Variável/Fixo */}
+        <select 
+          className="pessoal-input-field-small" 
+          value={isFixed} 
+          onChange={(e) => {
+            const newValue = e.target.value === "true";
+            if (newValue) {
+              fetchExistingFixedExpenses();
+            } else {
+              setIsFixed(newValue);
+            }
+          }}
+          style={{
+            backgroundColor: isFixed ? "#fff3e0" : "#e3f2fd",
+            borderColor: isFixed ? "#ff9800" : "#2196f3",
+            borderWidth: "2px"
+          }}
+        >
+          <option value="false">Variável</option>
+          <option value="true">Fixa</option>
+        </select>
+
+        {/* 2. Nome com autocomplete de despesas variáveis */}
+        <div style={{ position: "relative" }}>
+          <input 
+            className="pessoal-input-field"
+            type="text" 
+            value={newExpense} 
+            onChange={(e) => {
+              setNewExpense(e.target.value);
+              // Só mostrar sugestões se NÃO estiver no modo de despesa fixa
+              if (!isFixed) {
+                getVariableExpenseSuggestions(e.target.value);
+              }
+            }}
+            onFocus={(e) => {
+              if (!isFixed && e.target.value) {
+                getVariableExpenseSuggestions(e.target.value);
+              }
+            }}
+            onBlur={() => {
+              // Delay para permitir clique na sugestão
+              setTimeout(() => setShowVariableSuggestions(false), 200);
+              // Remover espaços do início e fim
+              setNewExpense(prev => prev.trim());
+            }}
+            placeholder="Nome da despesa/ganho" 
+            disabled={isEditingFixedExpense}
+          />
+          {showVariableSuggestions && variableExpenseSuggestions.length > 0 && (
+            <ul style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              right: 0,
+              backgroundColor: "#fff",
+              border: "2px solid #667eea",
+              borderRadius: "8px",
+              maxHeight: "200px",
+              overflowY: "auto",
+              zIndex: 1000,
+              margin: "4px 0 0 0",
+              padding: 0,
+              listStyle: "none",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+            }}>
+              {variableExpenseSuggestions.map((suggestion, index) => (
+                <li
+                  key={index}
+                  onClick={() => handleSelectVariableSuggestion(suggestion)}
+                  style={{
+                    padding: "10px 12px",
+                    cursor: "pointer",
+                    borderBottom: index < variableExpenseSuggestions.length - 1 ? "1px solid #eee" : "none",
+                    color: "#333",
+                    fontSize: "14px",
+                    textShadow: "none",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "12px"
+                  
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#f0f0ff";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  <span style={{ fontWeight: "500", flex: 1, textShadow: "none" }}>{suggestion.nomeDespesa}</span>
+                  <span style={{ 
+                    fontSize: "12px", 
+                    color: suggestion.tipoMovimento === "GASTO" ? "#ef4444" : "#10b981",
+                    fontWeight: "600",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    textShadow: "none",
+                    backgroundColor: suggestion.tipoMovimento === "GASTO" ? "#fee2e2" : "#d1fae5"
+                  }}>
+                    {suggestion.tipoMovimento}
+                  </span>
+                  <span style={{ 
+                    fontSize: "13px", 
+                    color: "#667eea",
+                    fontWeight: "600",
+                    minWidth: "80px",
+                    textAlign: "right",
+                    textShadow: "none"
+                  }}>
+                    R$ {suggestion.valorDespesa.toFixed(2).replace('.', ',')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         
+        {/* 3. Valor */}
         <input 
           className="pessoal-input-field pessoal-input-value"
           type="number" 
@@ -856,14 +1279,17 @@ const Pessoal = () => {
           placeholder="Valor (R$)" 
         />
         
+        {/* 4. Descrição */}
         <input 
           className="pessoal-input-field"
           type="text" 
           value={description} 
           onChange={(e) => setDescription(e.target.value)} 
+          onBlur={() => setDescription(prev => prev.trim())}
           placeholder="Descrição" 
         />
         
+        {/* 5. Data */}
         <input 
           className="pessoal-input-field"
           type="date" 
@@ -871,7 +1297,7 @@ const Pessoal = () => {
           onChange={(e) => setDate(e.target.value)} 
         />
 
-        {/* Campo de seleção de categorias */}
+        {/* 6. Campo de seleção de categorias */}
         <div className="pessoal-category-select">
           <div 
             className="pessoal-category-display" 
@@ -956,56 +1382,74 @@ const Pessoal = () => {
           )}
         </div>
 
-        <div className="pessoal-select-container">
-          <select 
-            className="pessoal-input-field-small" 
-            value={tipoMovimento} 
-            onChange={(e) => setTipoMovimento(e.target.value)}
-            style={{
-              backgroundColor: tipoMovimento === "GASTO" ? "#ffebee" : "#e8f5e9",
-              borderColor: tipoMovimento === "GASTO" ? "#ef5350" : "#66bb6a",
-              borderWidth: "2px"
-            }}
-          >
-            <option value="GASTO">Gasto</option>
-            <option value="GANHO">Ganho</option>
-          </select>
-          
-          <select 
-            className="pessoal-input-field-small" 
-            value={isFixed} 
-            onChange={(e) => {
-              const newValue = e.target.value === "true";
-              if (newValue) {
-                setShowFixedPeriodModal(true);
-              }
-              setIsFixed(newValue);
-            }}
-            style={{
-              backgroundColor: isFixed ? "#fff3e0" : "#e3f2fd",
-              borderColor: isFixed ? "#ff9800" : "#2196f3",
-              borderWidth: "2px"
-            }}
-          >
-            <option value="false">Variável</option>
-            <option value="true">Fixa</option>
-          </select>
-          
-          {tipoMovimento === "GASTO" && (
-            <div className="pessoal-vale-field">
-              <label className="pessoal-vale-label">VALE?</label>
-              <select className="pessoal-input-field-small" value={isVale} onChange={(e) => setIsVale(e.target.value === "true")}>
-                <option value="false">Não</option>
-                <option value="true">Sim</option>
-              </select>
-            </div>
-          )}
-        </div>
+        {/* 7. Campo Select Gasto/Ganho */}
+        <select 
+          className="pessoal-input-field-small" 
+          value={tipoMovimento} 
+          onChange={(e) => setTipoMovimento(e.target.value)}
+          style={{
+            backgroundColor: tipoMovimento === "GASTO" ? "#ffebee" : "#e8f5e9",
+            borderColor: tipoMovimento === "GASTO" ? "#ef5350" : "#66bb6a",
+            borderWidth: "2px"
+          }}
+        >
+          <option value="GASTO">Gasto</option>
+          <option value="GANHO">Ganho</option>
+        </select>
+        
+        {/* 8. Campo Select Vale (apenas quando for GASTO) */}
+        {tipoMovimento === "GASTO" && (
+          <div className="pessoal-vale-field">
+            <label className="pessoal-vale-label">VALE?</label>
+            <select className="pessoal-input-field-small" value={isVale} onChange={(e) => setIsVale(e.target.value === "true")}>
+              <option value="false">Não</option>
+              <option value="true">Sim</option>
+            </select>
+          </div>
+        )}
         
 
-        <button className="pessoal-save-btn" onClick={handleAddExpense} disabled={isLoading}>
-          {isLoading ? <FaSpinner className="pessoal-loading-icon" /> : "Adicionar"}
+        <button 
+          className="pessoal-save-btn" 
+          onClick={handleAddExpense} 
+          disabled={isLoading}
+          style={{
+            background: isEditingFixedExpense 
+              ? "linear-gradient(135deg, #ff9800 0%, #f57c00 100%)" 
+              : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+          }}
+        >
+          {isLoading ? (
+            <FaSpinner className="pessoal-loading-icon" />
+          ) : isEditingFixedExpense ? (
+            "✏️ Atualizar"
+          ) : (
+            "Adicionar"
+          )}
         </button>
+
+        {isEditingFixedExpense && (
+          <button 
+            className="pessoal-save-btn" 
+            onClick={() => {
+              setNewExpense("");
+              setAmount("");
+              setDescription("");
+              setDate(new Date().toISOString().substr(0, 10));
+              setIsFixed(false);
+              setTipoMovimento("GASTO");
+              setIsVale(false);
+              setSelectedCategory("");
+              setIsEditingFixedExpense(false);
+              setSelectedExistingExpense(null);
+            }}
+            style={{
+              background: "linear-gradient(135deg, #6c757d 0%, #5a6268 100%)"
+            }}
+          >
+            Cancelar
+          </button>
+        )}
       </div>
 
       <ul className="pessoal-expense-list">
@@ -1161,7 +1605,9 @@ const Pessoal = () => {
           </>
         ) : (
           <li className="pessoal-no-expenses">
-            {viewFilter === "GASTOS_FIXOS" 
+            {viewFilter === "TODOS"
+              ? "Nenhuma despesa encontrada para este mês"
+              : viewFilter === "GASTOS_FIXOS" 
               ? "Nenhum gasto fixo encontrado para este mês"
               : viewFilter === "GASTOS_VARIAVEIS"
               ? "Nenhum gasto variável encontrado para este mês"
@@ -1212,48 +1658,12 @@ const Pessoal = () => {
             )}
           </>
         ) : (
-          <div className="pessoal-micro-details">
-            {expenses
-              .filter(exp => {
-                const expenseDate = parseISO(exp.date);
-                const isMonthMatch = expenseDate.getMonth() === selectedMonth.getMonth() && 
-                                     expenseDate.getFullYear() === selectedMonth.getFullYear();
-                const categoryName = exp.categoria?.nomeCategoria || "Sem categoria";
-                const isTypeMatch = exp.tipoMovimento === selectedChartType;
-                return isMonthMatch && categoryName === selectedChartCategory && isTypeMatch;
-              })
-              .sort((a, b) => new Date(b.date) - new Date(a.date))
-              .map((expense) => (
-                <div key={expense.id} className="pessoal-micro-item">
-                  <div className="pessoal-micro-row">
-                    <span className="pessoal-micro-label">Nome:</span>
-                    <span className="pessoal-micro-value">{expense.nomeDespesa}</span>
-                  </div>
-                  <div className="pessoal-micro-row">
-                    <span className="pessoal-micro-label">Data:</span>
-                    <span className="pessoal-micro-value">{format(addDays(parseISO(expense.date), 1), "dd/MM/yyyy", { locale: ptBR })}</span>
-                  </div>
-                  <div className="pessoal-micro-row">
-                    <span className="pessoal-micro-label">Valor:</span>
-                    <span className="pessoal-micro-value" style={{ color: expense.tipoMovimento === "GASTO" ? "#dc3545" : "#28a745", fontWeight: "bold" }}>
-                      {formatCurrency(expense.valorDespesa)}
-                    </span>
-                  </div>
-                  {expense.descDespesa && (
-                    <div className="pessoal-micro-row">
-                      <span className="pessoal-micro-label">Descrição:</span>
-                      <span className="pessoal-micro-value">{expense.descDespesa}</span>
-                    </div>
-                  )}
-                  <div className="pessoal-micro-row">
-                    <span className="pessoal-micro-label">Tipo:</span>
-                    <span className="pessoal-micro-value">
-                      {expense.DespesaFixa ? "Fixo" : "Variável"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-          </div>
+          <>
+            <Bar data={getDynamicChartData()} options={getDynamicChartOptions()} plugins={[ChartDataLabels]} />
+            <p className="pessoal-chart-hint">
+              📊 Visualização detalhada por dia e despesa
+            </p>
+          </>
         )}
       </div>
 

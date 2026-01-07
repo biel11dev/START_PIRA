@@ -145,8 +145,10 @@ const ProductList = () => {
   // Calcular custo automaticamente: VALOR x QUANTIDADE
   useEffect(() => {
     if (value && quantity) {
-      const calculatedCost = parseFloat(value) * parseFloat(quantity);
-      setPrecoCusto(calculatedCost.toFixed(2));
+      const valorNumerico = parseCurrencyInput(value);
+      const calculatedCost = valorNumerico * parseFloat(quantity);
+      const formatted = formatCurrencyInput((calculatedCost * 100).toFixed(0));
+      setPrecoCusto(formatted);
     }
   }, [value, quantity]);
 
@@ -166,17 +168,36 @@ const ProductList = () => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
   };
 
+  const formatCurrencyInput = (value) => {
+    const numbers = value.replace(/\D/g, "");
+    const amount = Number(numbers) / 100;
+    return amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const parseCurrencyInput = (value) => {
+    const numbers = value.replace(/\./g, "").replace(",", ".");
+    return parseFloat(numbers) || 0;
+  };
+
   const handleAddProduct = () => {
     if (newProduct.trim() !== "" && quantity.trim() !== "" && value.trim() !== "" && valuecusto.trim() !== "") {
       setIsLoading(true);
       const categoryId = selectedCategory ? parseInt(selectedCategory) : null;
+      let valorNumerico = parseCurrencyInput(value);
+      const custoNumerico = parseCurrencyInput(valuecusto);
+      
+      // Se o valor estiver zerado, usar o custo como valor
+      if (valorNumerico === 0) {
+        valorNumerico = custoNumerico;
+      }
+      
       axios
         .post("https://api-start-pira.vercel.app/api/products", { 
           name: newProduct, 
           quantity, 
           unit, 
-          value, 
-          valuecusto, 
+          value: valorNumerico, 
+          valuecusto: custoNumerico, 
           categoryId 
         })
         .then((response) => {
@@ -339,9 +360,16 @@ const ProductList = () => {
     // Buscar dados do produto selecionado para preencher automaticamente
     const selectedProduct = products.find(p => p.name === suggestion);
     if (selectedProduct) {
+      setQuantity(selectedProduct.quantity.toString());
       setUnit(selectedProduct.unit);
-      setPreco(selectedProduct.value);
-      setPrecoCusto(selectedProduct.valuecusto);
+      
+      // Se o valor estiver zerado, usar o custo como valor
+      const valorParaUsar = selectedProduct.value === 0 ? selectedProduct.valuecusto : selectedProduct.value;
+      const valorFormatado = formatCurrencyInput((valorParaUsar * 100).toFixed(0));
+      const custoFormatado = formatCurrencyInput((selectedProduct.valuecusto * 100).toFixed(0));
+      
+      setPreco(valorFormatado);
+      setPrecoCusto(custoFormatado);
       setSelectedCategory(selectedProduct.categoryId?.toString() || "");
     }
   };
@@ -702,22 +730,34 @@ const ProductList = () => {
           placeholder="Quantidade" 
           disabled={isLoading} 
         />
-        <input 
-          type="number" 
-          value={value} 
-          onChange={(e) => setPreco(e.target.value)} 
-          placeholder="Valor (R$)" 
-          disabled={isLoading} 
-        />
-        <input 
-          className="input-custo-calculado"
-          type="number" 
-          value={valuecusto} 
-          onChange={(e) => setPrecoCusto(e.target.value)} 
-          placeholder="Custo (R$)" 
-          disabled={isLoading}
-          title="Calculado automaticamente (Valor x Quantidade), mas pode ser editado"
-        />
+        <div className="currency-input-wrapper">
+          <span className="currency-prefix">R$</span>
+          <input 
+            type="text" 
+            value={value} 
+            onChange={(e) => {
+              const formatted = formatCurrencyInput(e.target.value);
+              setPreco(formatted);
+            }}
+            placeholder="0,00" 
+            disabled={isLoading}
+          />
+        </div>
+        <div className="currency-input-wrapper">
+          <span className="currency-prefix">R$</span>
+          <input 
+            className="input-custo-calculado"
+            type="text" 
+            value={valuecusto} 
+            onChange={(e) => {
+              const formatted = formatCurrencyInput(e.target.value);
+              setPrecoCusto(formatted);
+            }}
+            placeholder="0,00" 
+            disabled={isLoading}
+            title="Calculado automaticamente (Valor x Quantidade), mas pode ser editado"
+          />
+        </div>
         
         {/* Seletor de unidades */}
         <div className="custom-select">

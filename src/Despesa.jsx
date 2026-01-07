@@ -50,6 +50,19 @@ const Despesa = () => {
       .catch((error) => {
         console.error("Erro ao buscar despesas:", error);
       });
+
+    // Carregar movimentações do localStorage
+    const savedMovements = localStorage.getItem('despesa_movements');
+    if (savedMovements) {
+      try {
+        const parsed = JSON.parse(savedMovements);
+        setRecentMovements(parsed);
+        console.log("Movimentações carregadas do localStorage:", parsed);
+      } catch (error) {
+        console.error("Erro ao carregar movimentações:", error);
+        localStorage.removeItem('despesa_movements');
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -58,6 +71,27 @@ const Despesa = () => {
       .then((response) => setExpenseOptions(response.data))
       .catch((error) => console.error("Erro ao buscar tipos de despesas:", error));
   }, []);
+
+  // Salvar movimentações no localStorage sempre que mudarem
+  useEffect(() => {
+    if (recentMovements.length > 0) {
+      // Limpar movimentações antigas (manter apenas últimos 3 meses)
+      const threeMonthsAgo = addMonths(new Date(), -3);
+      const filtered = recentMovements.filter(m => {
+        const movementDate = new Date(m.timestamp);
+        return movementDate >= threeMonthsAgo;
+      });
+      
+      if (filtered.length !== recentMovements.length) {
+        setRecentMovements(filtered);
+        localStorage.setItem('despesa_movements', JSON.stringify(filtered));
+        console.log(`Limpeza: ${recentMovements.length - filtered.length} movimentações antigas removidas`);
+      } else {
+        localStorage.setItem('despesa_movements', JSON.stringify(recentMovements));
+        console.log("Movimentações salvas no localStorage:", recentMovements.length);
+      }
+    }
+  }, [recentMovements]);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -473,6 +507,22 @@ const Despesa = () => {
               <span className="movements-modal-month">
                 Mês: {format(selectedMonth, "MMMM yyyy", { locale: ptBR })} - Total: {getFilteredMovements().length} {getFilteredMovements().length === 1 ? 'registro' : 'registros'}
               </span>
+              {recentMovements.length > 0 && (
+                <button 
+                  className="movements-clear-btn"
+                  onClick={() => {
+                    if (window.confirm('Deseja realmente limpar todo o histórico de movimentações?')) {
+                      setRecentMovements([]);
+                      localStorage.removeItem('despesa_movements');
+                      setMessage({ show: true, text: "Histórico limpo com sucesso!", type: "success" });
+                      setTimeout(() => setMessage(null), 3000);
+                    }
+                  }}
+                  title="Limpar todo o histórico de movimentações"
+                >
+                  🗑️ Limpar Histórico
+                </button>
+              )}
             </div>
 
             {getFilteredMovements().length > 0 ? (
