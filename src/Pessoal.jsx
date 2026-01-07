@@ -229,7 +229,51 @@ const Pessoal = () => {
           .put(`https://api-start-pira.vercel.app/api/desp-pessoal/${selectedExistingExpense.id}`, updatedData)
           .then((response) => {
             setExpenses((prev) => prev.map((exp) => (exp.id === selectedExistingExpense.id ? response.data : exp)));
-            setMessage({ show: true, text: "Despesa fixa atualizada com sucesso!", type: "success" });
+            const gastoId = response.data.id;
+            
+            // Se for GASTO e tiver VALE marcado, criar registro de VALE como GANHO
+            if (tipoMovimento === "GASTO" && isVale) {
+              const valeData = {
+                nomeDespesa: "VALE",
+                valorDespesa: parseFloat(amount),
+                descDespesa: `Vale referente a: ${newExpense.trim()}`,
+                date: formattedDate,
+                DespesaFixa: false,
+                tipoMovimento: "GANHO",
+                categoriaId: categoryId,
+                valeRelacionadoId: gastoId,
+                isVale: true,
+              };
+              
+              axios
+                .post("https://api-start-pira.vercel.app/api/desp-pessoal", valeData)
+                .then((valeResponse) => {
+                  setExpenses((prevExpenses) => [...prevExpenses, valeResponse.data]);
+                  console.log("VALE adicionado automaticamente:", valeResponse.data);
+                  
+                  // Atualizar o GASTO com o ID do VALE relacionado
+                  axios
+                    .put(`https://api-start-pira.vercel.app/api/desp-pessoal/${gastoId}`, {
+                      valeRelacionadoId: valeResponse.data.id,
+                    })
+                    .then(() => {
+                      // Atualizar estado local com a relação
+                      setExpenses((prevExpenses) =>
+                        prevExpenses.map((exp) =>
+                          exp.id === gastoId ? { ...exp, valeRelacionadoId: valeResponse.data.id } : exp
+                        )
+                      );
+                    })
+                    .catch((error) => {
+                      console.error("Erro ao atualizar valeRelacionadoId:", error);
+                    });
+                })
+                .catch((error) => {
+                  console.error("Erro ao adicionar VALE:", error);
+                });
+            }
+            
+            setMessage({ show: true, text: isVale ? "Despesa fixa atualizada e VALE adicionado com sucesso!" : "Despesa fixa atualizada com sucesso!", type: "success" });
             setTimeout(() => setMessage(null), 3000);
             
             // Limpar formulário
