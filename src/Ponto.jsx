@@ -35,6 +35,28 @@ const Ponto = () => {
   
   // Estados para histórico de holerites
   const [payslipHistory, setPayslipHistory] = useState([]);
+  
+  // Estados para migração de dados históricos
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [migrationLoading, setMigrationLoading] = useState(false);
+  const [migrationResult, setMigrationResult] = useState(null);
+  
+  // Estado para armazenar cálculos de bonificação
+  const [weeklyCalculations, setWeeklyCalculations] = useState({});
+  const [monthlyCalculations, setMonthlyCalculations] = useState({});
+  
+  // Estado para armazenar meta da semana selecionada
+  const [currentWeekMeta, setCurrentWeekMeta] = useState(null);
+  
+  // Estados para modal de meta semanal
+  const [showWeeklyMetaModal, setShowWeeklyMetaModal] = useState(false);
+  const [weeklyMetaEmployee, setWeeklyMetaEmployee] = useState(null);
+  const [weeklyMetaValues, setWeeklyMetaValues] = useState({
+    metaHoras: "",
+    bonificacao: "",
+    valorHora: ""
+  });
+  const [selectedWeekForMeta, setSelectedWeekForMeta] = useState(null);
 
   // Carregar histórico de holerites do localStorage
   useEffect(() => {
@@ -494,7 +516,7 @@ const Ponto = () => {
           ctx.fillStyle = '#1976d2';
           ctx.font = 'bold 16px Arial';
           
-          const weeklyCalc = calculateWeeklyValue(selectedEmployee, weekPoints);
+          const weeklyCalc = await calculateWeeklyValue(selectedEmployee, weekPoints);
           const valorTotalComBonus = weeklyCalc.valorBase + weeklyCalc.bonificacao;
           
           ctx.fillText(`Total da Semana: R$ ${valorTotalComBonus.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 80, yPos);
@@ -549,8 +571,8 @@ const Ponto = () => {
           let semanaIndex = 1;
           
           // Dados de cada semana do mês
-          Object.entries(weeklyGroups).forEach(([weekKey, weekPoints]) => {
-            const weekCalc = calculateWeeklyValue(selectedEmployee, weekPoints);
+          for (const [weekKey, weekPoints] of Object.entries(weeklyGroups)) {
+            const weekCalc = await calculateWeeklyValue(selectedEmployee, weekPoints);
             const valorSemana = weekCalc.valorBase + weekCalc.bonificacao;
             
             // Calcular total de horas da semana
@@ -588,7 +610,7 @@ const Ponto = () => {
             totalValorMes += valorSemana;
             semanaIndex++;
             yPos += 25;
-          });
+          }
           
           // Resumo mensal
           yPos += 20;
@@ -634,14 +656,17 @@ const Ponto = () => {
             return acc;
           }, 0);
           
-          const semanasComBonus = Object.values(weeklyGroups).filter(weekPoints => {
-            const weekCalc = calculateWeeklyValue(selectedEmployee, weekPoints);
-            return weekCalc.temBonificacao;
-          }).length;
+          const semanasComBonus = [];
+          for (const weekPoints of Object.values(weeklyGroups)) {
+            const weekCalc = await calculateWeeklyValue(selectedEmployee, weekPoints);
+            if (weekCalc.temBonificacao) {
+              semanasComBonus.push(weekCalc);
+            }
+          }
           
           ctx.fillText(`Total de Horas Trabalhadas: ${totalHorasMes.toFixed(1)}h`, 80, yPos);
           yPos += 20;
-          ctx.fillText(`Semanas com Bonificação: ${semanasComBonus} de ${Object.keys(weeklyGroups).length}`, 80, yPos);
+          ctx.fillText(`Semanas com Bonificação: ${semanasComBonus.length} de ${Object.keys(weeklyGroups).length}`, 80, yPos);
           yPos += 20;
           ctx.fillText(`Média de Horas por Dia: ${(totalHorasMes / monthPoints.length).toFixed(1)}h`, 80, yPos);
           
@@ -881,6 +906,65 @@ const Ponto = () => {
   bonificacao: "",
 });
 
+// Calcular valores de bonificação quando os dados mudarem
+useEffect(() => {
+  const calculateAllValues = async () => {
+    const weeklyCalcs = {};
+    const monthlyCalcs = {};
+    
+    // Calcular valores semanais
+    for (const employee of weeklyData) {
+      if (employee.points && employee.points.length > 0) {
+        const calc = await calculateWeeklyValue(employee, employee.points);
+        weeklyCalcs[employee.id] = calc;
+      }
+    }
+    
+    // Calcular valores mensais
+    for (const employee of monthlyData) {
+      if (employee.points && employee.points.length > 0) {
+        // Agrupar pontos por semana
+        const weeklyGroups = {};
+        employee.points.forEach(point => {
+          const date = parseISODate(point.date);
+          const weekKey = getWeekKey(date);
+          if (weekKey !== null) {
+            if (!weeklyGroups[weekKey]) {
+              weeklyGroups[weekKey] = [];
+            }
+            weeklyGroups[weekKey].push(point);
+          }
+        });
+        
+        let valorBaseTotal = 0;
+        let bonificacaoTotal = 0;
+        let bonificacoesConquistadas = 0;
+        
+        for (const weekPoints of Object.values(weeklyGroups)) {
+          const weekCalc = await calculateWeeklyValue(employee, weekPoints);
+          valorBaseTotal += weekCalc.valorBase;
+          bonificacaoTotal += weekCalc.bonificacao;
+          if (weekCalc.temBonificacao) {
+            bonificacoesConquistadas++;
+          }
+        }
+        
+        monthlyCalcs[employee.id] = {
+          valorBaseTotal,
+          bonificacaoTotal,
+          bonificacoesConquistadas,
+          valorTotal: valorBaseTotal + bonificacaoTotal
+        };
+      }
+    }
+    
+    setWeeklyCalculations(weeklyCalcs);
+    setMonthlyCalculations(monthlyCalcs);
+  };
+  
+  calculateAllValues();
+}, [weeklyData, monthlyData]);
+
 // Atualiza os campos quando o funcionário selecionado mudar
 useEffect(() => {
   const selectedEmployee = employees.find(emp => emp.id === selectedEmployeeId);
@@ -919,6 +1003,32 @@ const handleSaveEdit = () => {
       fetchEmployees(selectedDate);
     }
   }, [selectedTab, selectedDate]);
+
+  // Buscar meta da semana selecionada
+  useEffect(() => {
+    const fetchCurrentWeekMeta = async () => {
+      if (!selectedEmployeeId || selectedTab !== 'weekly') {
+        setCurrentWeekMeta(null);
+        return;
+      }
+
+      try {
+        const response = await axios.get(
+          `https://api-start-pira.vercel.app/api/employee-weekly-meta/${selectedEmployeeId}`,
+          { params: { date: selectedDate } }
+        );
+        
+        if (response.data) {
+          setCurrentWeekMeta(response.data);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar meta da semana:", error);
+        setCurrentWeekMeta(null);
+      }
+    };
+
+    fetchCurrentWeekMeta();
+  }, [selectedEmployeeId, selectedDate, selectedTab]);
 
   const handleRegisterTime = async (id) => {
     try {
@@ -1098,20 +1208,228 @@ const handleSaveEdit = () => {
     }
   };
 
+  // Função auxiliar para buscar meta vigente
+  const getMetaForDate = async (employeeId, date) => {
+    try {
+      const response = await axios.get(
+        `https://api-start-pira.vercel.app/api/employee-meta/${employeeId}`,
+        { params: { date: date.toISOString().split('T')[0] } }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Erro ao buscar meta:", error);
+      return null;
+    }
+  };
+
   const handleUpdateEmployee = async (id, updatedData) => {
     try {
+      // Buscar funcionário atual para comparar valores
+      const currentEmployee = employees.find(emp => emp.id === id);
+      
+      if (!currentEmployee) {
+        throw new Error("Funcionário não encontrado");
+      }
+
+      // Verificar se houve mudança na meta, bonificação ou valor hora
+      const metaChanged = 
+        (updatedData.metaHoras !== undefined && parseFloat(updatedData.metaHoras) !== parseFloat(currentEmployee.metaHoras || 0)) ||
+        (updatedData.bonificacao !== undefined && parseFloat(updatedData.bonificacao) !== parseFloat(currentEmployee.bonificacao || 0)) ||
+        (updatedData.valorHora !== undefined && parseFloat(updatedData.valorHora) !== parseFloat(currentEmployee.valorHora || 0));
+
+      if (metaChanged) {
+        // Preparar mensagem de confirmação
+        const currentDate = new Date();
+        const currentMonth = currentDate.toLocaleDateString('pt-BR', { 
+          month: 'long', 
+          year: 'numeric' 
+        });
+        
+        const oldMetaHoras = currentEmployee.metaHoras || 'Não definido';
+        const oldBonificacao = currentEmployee.bonificacao ? `R$ ${parseFloat(currentEmployee.bonificacao).toFixed(2).replace('.', ',')}` : 'R$ 0,00';
+        const oldValorHora = currentEmployee.valorHora ? `R$ ${parseFloat(currentEmployee.valorHora).toFixed(2).replace('.', ',')}` : 'R$ 0,00';
+        
+        const newMetaHoras = updatedData.metaHoras || updatedData.metaHoras === 0 ? parseFloat(updatedData.metaHoras) : oldMetaHoras;
+        const newBonificacao = updatedData.bonificacao || updatedData.bonificacao === 0 ? `R$ ${parseFloat(updatedData.bonificacao).toFixed(2).replace('.', ',')}` : oldBonificacao;
+        const newValorHora = updatedData.valorHora || updatedData.valorHora === 0 ? `R$ ${parseFloat(updatedData.valorHora).toFixed(2).replace('.', ',')}` : oldValorHora;
+        
+        const confirmMessage = `⚠️ ATENÇÃO: Alteração de Dados Salariais\n\nFuncionário: ${currentEmployee.name}\n\nValores anteriores:\n• Valor Hora: ${oldValorHora}\n• Meta de Horas: ${oldMetaHoras} ${oldMetaHoras !== 'Não definido' ? 'horas/semana' : ''}\n• Bonificação: ${oldBonificacao}\n\nNovos valores:\n• Valor Hora: ${newValorHora}\n• Meta de Horas: ${newMetaHoras} horas/semana\n• Bonificação: ${newBonificacao}\n\nMês de aplicação: ${currentMonth}\n\nEsta alteração será aplicada a partir de ${currentMonth}.\nOs valores dos meses anteriores serão preservados.\n\nDeseja continuar?`;
+
+        if (!window.confirm(confirmMessage)) {
+          setMessage({ show: true, text: "Alteração cancelada pelo usuário.", type: "info" });
+          setTimeout(() => setMessage(""), 3000);
+          return; // Usuário cancelou
+        }
+
+        // Criar novo registro de meta no histórico
+        try {
+          await axios.post("https://api-start-pira.vercel.app/api/employee-meta", {
+            employeeId: id,
+            valorHora: parseFloat(updatedData.valorHora || 0),
+            metaHoras: parseFloat(updatedData.metaHoras || 0),
+            bonificacao: parseFloat(updatedData.bonificacao || 0),
+            validFrom: new Date() // Primeiro dia do mês atual será ajustado pela API
+          });
+
+          setMessage({ 
+            show: true, 
+            text: `Dados salariais atualizados com sucesso! Vigente a partir de ${currentMonth}`, 
+            type: "success" 
+          });
+        } catch (metaError) {
+          console.error("Erro ao salvar meta no histórico:", metaError);
+          setMessage({ 
+            show: true, 
+            text: "Erro ao salvar histórico de dados salariais. Por favor, tente novamente.", 
+            type: "error" 
+          });
+          setTimeout(() => setMessage(""), 3000);
+          return;
+        }
+      }
+
+      // Atualizar funcionário normalmente
       await axios.put(`https://api-start-pira.vercel.app/api/employees/${id}`, updatedData);
 
       setEmployees((prev) => prev.map((employee) => (employee.id === id ? { ...employee, ...updatedData } : employee)));
       
-      
-      setMessage({ show: true, text: "Dados atualizados com sucesso!", type: "success" });
+      if (!metaChanged) {
+        setMessage({ show: true, text: "Dados atualizados com sucesso!", type: "success" });
+      }
     } catch (error) {
       console.error("Erro ao atualizar funcionário:", error);
       console.error("Dados enviados:", updatedData);
       setMessage({ show: true, text: "Erro ao atualizar funcionário.", type: "error" });
     } finally {
       setTimeout(() => setMessage(""), 3000);
+    }
+  };
+
+  // Função auxiliar para obter o range completo da semana (terça a domingo)
+  const getWeekRangee = (date) => {
+    const currentDate = new Date(date);
+    const dayOfWeek = currentDate.getDay(); // 0=domingo, 1=segunda, 2=terça...
+    
+    // Encontrar a terça-feira da semana
+    let tuesday = new Date(currentDate);
+    if (dayOfWeek === 0) { // Domingo
+      tuesday.setDate(tuesday.getDate() - 5);
+    } else if (dayOfWeek === 1) { // Segunda
+      tuesday.setDate(tuesday.getDate() - 6);
+    } else if (dayOfWeek >= 2) { // Terça a sábado
+      tuesday.setDate(tuesday.getDate() - (dayOfWeek - 2));
+    }
+    
+    // Domingo é 5 dias depois da terça
+    const sunday = new Date(tuesday);
+    sunday.setDate(sunday.getDate() + 5);
+    
+    return {
+      startDate: tuesday,
+      endDate: sunday,
+      startDateStr: tuesday.toISOString().split('T')[0],
+      endDateStr: sunday.toISOString().split('T')[0]
+    };
+  };
+
+  // Funções para gerenciar metas semanais específicas
+  const handleOpenWeeklyMetaModal = (employee, weekStart) => {
+    setWeeklyMetaEmployee(employee);
+    setSelectedWeekForMeta(weekStart);
+    setWeeklyMetaValues({
+      metaHoras: employee.metaHoras || "",
+      bonificacao: employee.bonificacao || "",
+      valorHora: employee.valorHora || ""
+    });
+    setShowWeeklyMetaModal(true);
+  };
+
+  const handleSaveWeeklyMeta = async () => {
+    if (!weeklyMetaEmployee || !selectedWeekForMeta) {
+      setMessage({ show: true, text: "Dados incompletos!", type: "error" });
+      return;
+    }
+
+    try {
+      const weekStartDate = new Date(selectedWeekForMeta);
+      const year = weekStartDate.getFullYear();
+      const month = weekStartDate.getMonth() + 1;
+
+      await axios.post("https://api-start-pira.vercel.app/api/employee-weekly-meta", {
+        employeeId: weeklyMetaEmployee.id,
+        weekStart: selectedWeekForMeta,
+        year,
+        month,
+        metaHoras: parseFloat(weeklyMetaValues.metaHoras) || 0,
+        bonificacao: parseFloat(weeklyMetaValues.bonificacao) || 0,
+        valorHora: parseFloat(weeklyMetaValues.valorHora) || 0
+      });
+
+      setMessage({ 
+        show: true, 
+        text: "Meta semanal definida com sucesso! Os cálculos serão atualizados.", 
+        type: "success" 
+      });
+
+      setShowWeeklyMetaModal(false);
+      
+      // Atualizar a meta atual exibida
+      setCurrentWeekMeta({
+        metaHoras: parseFloat(weeklyMetaValues.metaHoras) || 0,
+        bonificacao: parseFloat(weeklyMetaValues.bonificacao) || 0,
+        valorHora: parseFloat(weeklyMetaValues.valorHora) || 0,
+        isDefault: false
+      });
+      
+      // Recarregar dados para atualizar os cálculos
+      if (selectedTab === 'weekly') {
+        await fetchWeeklyData(selectedDate);
+      } else if (selectedTab === 'monthly') {
+        await fetchMonthlyData(selectedDate);
+      }
+    } catch (error) {
+      console.error("Erro ao salvar meta semanal:", error);
+      setMessage({ show: true, text: "Erro ao salvar meta semanal.", type: "error" });
+    } finally {
+      setTimeout(() => setMessage(""), 3000);
+    }
+  };
+
+  // Função para migrar dados históricos criando metas semanais
+  const handleMigrateHistoricalData = async () => {
+    const confirmMessage = `⚠️ MIGRAÇÃO DE METAS SEMANAIS\n\nEsta operação criará registros de metas semanais específicas para TODAS as semanas que possuem pontos registrados.\n\nO sistema irá:\n• Buscar todos os pontos de cada funcionário\n• Criar uma meta semanal para cada semana (terça a domingo)\n• Usar os valores atuais de valorHora, metaHoras e bonificação\n• Ignorar semanas que já possuem metas definidas\n\nIsso permitirá editar metas de semanas passadas sem afetar outras.\n\n⚠️ ATENÇÃO: Esta operação pode levar alguns minutos dependendo da quantidade de dados.\n\nDeseja continuar?`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setMigrationLoading(true);
+    setShowMigrationModal(true);
+    setMigrationResult(null);
+
+    try {
+      const response = await axios.post("http://localhost:3000/api/migrate-employee-meta-history");
+      
+      setMigrationResult(response.data);
+      setMessage({ 
+        show: true, 
+        text: `Migração concluída! ${response.data.totalWeeksCreated} semanas criadas, ${response.data.totalWeeksSkipped} ignoradas.`, 
+        type: "success" 
+      });
+    } catch (error) {
+      console.error("Erro ao migrar dados:", error);
+      setMigrationResult({
+        error: true,
+        message: error.response?.data?.error || "Erro ao executar migração"
+      });
+       setMessage({ 
+        show: true, 
+        text: "Erro ao migrar metas semanais.", 
+        type: "error" 
+      });
+    } finally {
+      setMigrationLoading(false);
+      setTimeout(() => setMessage(""), 5000);
     }
   };
 
@@ -1149,7 +1467,7 @@ const handleSaveEdit = () => {
   };
 
   // Função para calcular valor total mensal (valor diário + bonificações semanais)
-  const calculateMonthlyValue = (employee, points) => {
+  const calculateMonthlyValue = async (employee, points) => {
     if (!points || points.length === 0) return 0;
 
     // Agrupar pontos por semana (excluindo segundas-feiras)
@@ -1169,11 +1487,17 @@ const handleSaveEdit = () => {
     let bonificacaoTotal = 0;
 
     // Calcular valor base e bonificação para cada semana
-    Object.values(weeklyGroups).forEach(weekPoints => {
-      const weekCalc = calculateWeeklyValue(employee, weekPoints);
+    for (const [weekKey, weekPoints] of Object.entries(weeklyGroups)) {
+      // Extrair a data de início da semana do weekKey
+      let weekStartDate = null;
+      if (weekKey !== 'parcial' && !weekKey.includes('parcial')) {
+        weekStartDate = new Date(weekKey);
+      }
+      
+      const weekCalc = await calculateWeeklyValue(employee, weekPoints, weekStartDate);
       valorTotal += weekCalc.valorBase;
       bonificacaoTotal += weekCalc.bonificacao;
-    });
+    }
     
     return valorTotal + bonificacaoTotal;
   };
@@ -1226,8 +1550,50 @@ const handleSaveEdit = () => {
   };
 
   // Função para calcular valor semanal (valor diário + bonificação se meta atingida)
-  const calculateWeeklyValue = (employee, weekPoints) => {
+  const calculateWeeklyValue = async (employee, weekPoints, weekStartDate = null) => {
     if (!weekPoints || weekPoints.length === 0) return { valorBase: 0, bonificacao: 0, temBonificacao: false };
+
+    // Determinar a data de início da semana se não foi fornecida
+    let weekStart = weekStartDate;
+    if (!weekStart && weekPoints.length > 0) {
+      // Pegar a primeira data dos pontos e encontrar a terça-feira da semana
+      const firstPoint = parseISODate(weekPoints[0].date);
+      const dayOfWeek = firstPoint.getDay();
+      
+      weekStart = new Date(firstPoint);
+      if (dayOfWeek === 0) { // Domingo
+        weekStart.setDate(weekStart.getDate() - 5);
+      } else if (dayOfWeek === 1) { // Segunda (não deveria acontecer)
+        weekStart.setDate(weekStart.getDate() - 6);
+      } else if (dayOfWeek >= 2) { // Terça a sábado
+        weekStart.setDate(weekStart.getDate() - (dayOfWeek - 2));
+      }
+    }
+
+    // Buscar meta semanal específica usando a primeira data dos pontos
+    let metaHoras = parseFloat(employee.metaHoras) || 0;
+    let bonificacao = parseFloat(employee.bonificacao) || 0;
+    let valorHora = parseFloat(employee.valorHora) || 0;
+
+    if (weekPoints.length > 0) {
+      try {
+        // Usar a primeira data dos pontos para buscar a meta (busca por range weekStart-weekEnd)
+        const firstPointDate = parseISODate(weekPoints[0].date).toISOString().split('T')[0];
+        const response = await axios.get(
+          `https://api-start-pira.vercel.app/api/employee-weekly-meta/${employee.id}`,
+          { params: { date: firstPointDate } }
+        );
+        
+        if (response.data && !response.data.isDefault) {
+          metaHoras = parseFloat(response.data.metaHoras) || 0;
+          bonificacao = parseFloat(response.data.bonificacao) || 0;
+          valorHora = parseFloat(response.data.valorHora) || valorHora;
+        }
+      } catch (error) {
+        console.error("Erro ao buscar meta semanal, usando valores padrão:", error);
+        // Continua com valores padrão do employee
+      }
+    }
 
     // Calcular total de horas trabalhadas na semana
     const weekWorkedMin = weekPoints.reduce((acc, point) => {
@@ -1240,18 +1606,18 @@ const handleSaveEdit = () => {
     }, 0);
 
     const weekWorkedHours = weekWorkedMin / 60;
-    const valorBase = weekWorkedHours * (parseFloat(employee.valorHora) || 0);
+    const valorBase = weekWorkedHours * valorHora;
     
     // Verificar bonificação semanal
-    const metaHoras = parseFloat(employee.metaHoras) || 0;
-    const bonificacao = parseFloat(employee.bonificacao) || 0;
     const temBonificacao = metaHoras > 0 && weekWorkedHours >= metaHoras && bonificacao > 0;
     
     return {
       valorBase,
       bonificacao: temBonificacao ? bonificacao : 0,
       temBonificacao,
-      totalHoras: weekWorkedHours
+      totalHoras: weekWorkedHours,
+      metaHoras,
+      valorHora
     };
   };
 
@@ -1499,6 +1865,23 @@ const handleSaveEdit = () => {
         >
           🧾 Gerar Holerite
         </button>
+        {/* Botão para migrar dados históricos */}
+        <button 
+          onClick={handleMigrateHistoricalData}
+          style={{ 
+            padding: "8px 15px", 
+            background: "#ff9800", 
+            color: "white", 
+            border: "none", 
+            borderRadius: "4px", 
+            cursor: "pointer",
+            marginLeft: "10px",
+            fontWeight: "bold"
+          }}
+          disabled={migrationLoading}
+        >
+          {migrationLoading ? "⏳ Migrando..." : "🔄 Migrar Histórico"}
+        </button>
       </div>
 
       <div className="date-selector">
@@ -1677,7 +2060,7 @@ const handleSaveEdit = () => {
         /> 
       </div>
       <div style={{ marginBottom: 12, textShadow: "none" }}>
-        <label style={{ fontWeight: "bold", textShadow: "none" }}>Meta de horas (semana):</label>
+        <label style={{ fontWeight: "bold", textShadow: "none" }}>Meta de horas (Padrão Geral):</label>
         <input
           style={{ marginLeft: 8, padding: 6, borderRadius: 4, border: "1px solid #ccc", width: 120, textShadow: "none" }}
           type="number"
@@ -1755,9 +2138,51 @@ const handleSaveEdit = () => {
         if (!selectedEmployee) return null;
         return (
           <div className="employee-info-banner">
-            <h3 className="employee-info-title">
-              {selectedEmployee.name.toUpperCase()} - {(selectedEmployee.position || 'N/A').toUpperCase()}
-            </h3>
+            <div className="employee-info-content">
+                  {selectedTab === 'weekly' && currentWeekMeta && (
+                <div className="meta-info-compact">
+                  Meta: {currentWeekMeta.metaHoras}h | Bônus: R$ {currentWeekMeta.bonificacao.toFixed(2)} | Valor/h: R$ {currentWeekMeta.valorHora.toFixed(2)}
+                  {currentWeekMeta.isDefault && <span className="meta-badge"> (Padrão)</span>}
+                </div>
+              )}
+              <h3 className="employee-info-title">
+                {selectedEmployee.name.toUpperCase()} - {(selectedEmployee.position || 'N/A').toUpperCase()}
+              </h3>
+              
+              {selectedTab === 'weekly' && (
+                <button
+                  className="btn-define-meta"
+                  onClick={() => {
+                    // Usar o início da semana do range selecionado
+                    let tuesdayDateStr;
+                    if (selectedWeekRange) {
+                      const pad = (n) => n.toString().padStart(2, "0");
+                      tuesdayDateStr = `${selectedWeekRange.startDate.getFullYear()}-${pad(selectedWeekRange.startDate.getMonth() + 1)}-${pad(selectedWeekRange.startDate.getDate())}`;
+                    } else {
+                      // Fallback: calcular a partir de selectedDate
+                      const currentDate = new Date(selectedDate);
+                      const dayOfWeek = currentDate.getDay();
+                      let tuesdayDate = new Date(currentDate);
+                      
+                      if (dayOfWeek === 0) { // Domingo
+                        tuesdayDate.setDate(tuesdayDate.getDate() - 5);
+                      } else if (dayOfWeek === 1) { // Segunda
+                        tuesdayDate.setDate(tuesdayDate.getDate() - 6);
+                      } else { // Terça a Sábado
+                        tuesdayDate.setDate(tuesdayDate.getDate() - (dayOfWeek - 2));
+                      }
+                      
+                      tuesdayDateStr = tuesdayDate.toISOString().split('T')[0];
+                    }
+                    
+                    handleOpenWeeklyMetaModal(selectedEmployee, tuesdayDateStr);
+                  }}
+                  title="Definir meta específica para esta semana"
+                >
+                  🎯 Definir Meta da Semana
+                </button>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -1963,7 +2388,7 @@ const handleSaveEdit = () => {
                   <td className="resumo-horas">{formatHM(totalWorked)}</td>
                   <td className="resumo-valor">
                     {(() => {
-                      const weeklyCalc = calculateWeeklyValue(employee, pointsSorted);
+                      const weeklyCalc = weeklyCalculations[employee.id] || { valorBase: 0, bonificacao: 0, temBonificacao: false };
                       const valorTotal = weeklyCalc.valorBase + weeklyCalc.bonificacao;
                       return (
                         <>
@@ -2095,45 +2520,23 @@ const handleSaveEdit = () => {
                   <td className="resumo-horas">{formatHM(totalWorked)}</td>
                   <td className="resumo-valor">
                     {(() => {
-                      // Agrupar pontos por semana (excluindo segundas-feiras)
-                      const weeklyGroups = {};
-                      pointsSorted.forEach(point => {
-                        const date = parseISODate(point.date);
-                        const weekKey = getWeekKey(date);
-                        if (weekKey !== null) { // Ignorar segundas-feiras (weekKey === null)
-                          if (!weeklyGroups[weekKey]) {
-                            weeklyGroups[weekKey] = [];
-                          }
-                          weeklyGroups[weekKey].push(point);
-                        }
-                      });
-
-                      let valorBaseTotal = 0;
-                      let bonificacaoTotal = 0;
-                      let bonificacoesConquistadas = 0;
-
-                      // Calcular valor base e bonificação para cada semana
-                      Object.values(weeklyGroups).forEach(weekPoints => {
-                        const weekCalc = calculateWeeklyValue(employee, weekPoints);
-                        valorBaseTotal += weekCalc.valorBase;
-                        bonificacaoTotal += weekCalc.bonificacao;
-                        if (weekCalc.temBonificacao) {
-                          bonificacoesConquistadas++;
-                        }
-                      });
-                      
-                      const valorTotal = valorBaseTotal + bonificacaoTotal;
+                      const monthlyCalc = monthlyCalculations[employee.id] || { 
+                        valorBaseTotal: 0, 
+                        bonificacaoTotal: 0, 
+                        bonificacoesConquistadas: 0,
+                        valorTotal: 0 
+                      };
                       
                       return (
                         <>
-                          <div className="valor-base">R$ {valorBaseTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                          {bonificacoesConquistadas > 0 && (
+                          <div className="valor-base">R$ {monthlyCalc.valorBaseTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          {monthlyCalc.bonificacoesConquistadas > 0 && (
                             <>
                               <div className="valor-bonificacao">
-                                + R$ {bonificacaoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 🏆 ({bonificacoesConquistadas}x)
+                                + R$ {monthlyCalc.bonificacaoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 🏆 ({monthlyCalc.bonificacoesConquistadas}x)
                               </div>
                               <div className="valor-total">
-                                = R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                = R$ {monthlyCalc.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </div>
                             </>
                           )}
@@ -2296,7 +2699,7 @@ const handleSaveEdit = () => {
                 </p>
               </div>
               <div>
-                <strong>Meta de Horas (semana):</strong>
+                <strong>Meta de Horas (Padrão Geral):</strong>
                 <p style={{ margin: "4px 0", color: "#666", textShadow: "none" }}>
                   {selectedEmployeeForDetails.metaHoras ? `${selectedEmployeeForDetails.metaHoras}h` : "N/A"}
                 </p>
@@ -2526,6 +2929,254 @@ const handleSaveEdit = () => {
                 }}
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Resultado da Migração */}
+      {showMigrationModal && migrationResult && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: "rgba(0,0,0,0.7)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: "#fff",
+            padding: "30px",
+            borderRadius: "8px",
+            maxWidth: "600px",
+            maxHeight: "80vh",
+            overflowY: "auto",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
+          }}>
+            <h2 style={{ 
+              color: migrationResult.error ? "#d32f2f" : "#4caf50",
+              marginBottom: "20px",
+              textAlign: "center"
+            }}>
+              {migrationResult.error ? "❌ Erro na Migração" : "✅ Migração Concluída"}
+            </h2>
+
+            {migrationResult.error ? (
+              <div style={{ padding: "15px", background: "#ffebee", borderRadius: "4px", marginBottom: "20px" }}>
+                <p style={{ color: "#c62828", margin: 0 }}>{migrationResult.message}</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: "20px", padding: "15px", background: "#e8f5e9", borderRadius: "4px" }}>
+                  <p style={{ margin: "5px 0" }}><strong>Total de funcionários:</strong> {migrationResult.totalEmployees}</p>
+                  <p style={{ margin: "5px 0" }}><strong>Total de semanas processadas:</strong> {migrationResult.totalWeeks}</p>
+                  <p style={{ margin: "5px 0", color: "#2e7d32" }}><strong>✅ Semanas criadas:</strong> {migrationResult.totalWeeksCreated}</p>
+                  <p style={{ margin: "5px 0", color: "#f57c00" }}><strong>⏭️ Semanas ignoradas:</strong> {migrationResult.totalWeeksSkipped}</p>
+                </div>
+
+                {migrationResult.details && migrationResult.details.length > 0 && (
+                  <div style={{ marginBottom: "20px" }}>
+                    <h3 style={{ fontSize: "16px", marginBottom: "10px" }}>Detalhes por Funcionário:</h3>
+                    <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                      {migrationResult.details.map((detail, index) => (
+                        <div key={index} style={{
+                          padding: "10px",
+                          marginBottom: "8px",
+                          background: detail.status === "migrated" ? "#e8f5e9" : detail.status === "no-points" ? "#fff3e0" : "#f5f5f5",
+                          borderLeft: `4px solid ${detail.status === "migrated" ? "#4caf50" : detail.status === "no-points" ? "#ff9800" : "#9e9e9e"}`,
+                          borderRadius: "4px"
+                        }}>
+                          <p style={{ margin: "2px 0", fontWeight: "bold" }}>
+                            {detail.status === "migrated" ? "✅" : detail.status === "no-points" ? "⚠️" : "⏭️"} {detail.name}
+                          </p>
+                          {detail.status === "migrated" ? (
+                            <div style={{ fontSize: "13px", color: "#666" }}>
+                              <p style={{ margin: "2px 0" }}><strong>Semanas criadas:</strong> {detail.weeksCreated}</p>
+                              <p style={{ margin: "2px 0" }}><strong>Semanas ignoradas:</strong> {detail.weeksSkipped}</p>
+                              <p style={{ margin: "2px 0" }}><strong>Total de semanas:</strong> {detail.totalWeeks}</p>
+                              <p style={{ margin: "2px 0", marginTop: "5px", paddingTop: "5px", borderTop: "1px solid #ddd" }}>
+                                Valor/Hora: R$ {detail.valorHora?.toFixed(2)} | Meta: {detail.metaHoras}h | Bonificação: R$ {detail.bonificacao?.toFixed(2)}
+                              </p>
+                            </div>
+                          ) : detail.status === "no-points" ? (
+                            <p style={{ fontSize: "13px", color: "#666", margin: "2px 0" }}>{detail.message}</p>
+                          ) : (
+                            <p style={{ fontSize: "13px", color: "#666", margin: "2px 0" }}>
+                              {detail.weeksCreated} semanas criadas, {detail.weeksSkipped} ignoradas
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <button
+              style={{
+                background: "#1976d2",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+                padding: "12px 24px",
+                cursor: "pointer",
+                width: "100%",
+                fontSize: "16px",
+                fontWeight: "bold"
+              }}
+              onClick={() => {
+                setShowMigrationModal(false);
+                setMigrationResult(null);
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Meta Semanal */}
+      {showWeeklyMetaModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: "rgba(0,0,0,0.7)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: "#fff",
+            padding: "30px",
+            borderRadius: "8px",
+            maxWidth: "500px",
+            width: "90%",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
+          }}>
+            <h2 style={{ 
+              color: "#1976d2",
+              marginBottom: "20px",
+              textAlign: "center",
+              textShadow: "none"
+            }}>
+              Definir Meta para Semana Específica
+            </h2>
+
+            <div style={{ marginBottom: "20px", padding: "15px", background: "#e3f2fd", borderRadius: "4px" }}>
+              <p style={{ margin: "5px 0" }}><strong>Funcionário:</strong> {weeklyMetaEmployee?.name}</p>
+              <p style={{ margin: "5px 0" }}>
+                <strong>Período:</strong> {selectedWeekForMeta ? (() => {
+                  const weekRange = getWeekRangee(selectedWeekForMeta);
+                  return `${weekRange.startDate.toLocaleDateString('pt-BR')} - ${weekRange.endDate.toLocaleDateString('pt-BR')}`;
+                })() : 'N/A'}
+              </p>
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold", textShadow: "none" }}>
+                Meta de Horas (Semana):
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                value={weeklyMetaValues.metaHoras}
+                onChange={(e) => setWeeklyMetaValues(prev => ({ ...prev, metaHoras: e.target.value }))}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  textShadow: "none"
+                }}
+                placeholder="Ex: 30"
+              />
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold", textShadow: "none" }}>
+                Bonificação (R$):
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={weeklyMetaValues.bonificacao}
+                onChange={(e) => setWeeklyMetaValues(prev => ({ ...prev, bonificacao: e.target.value }))}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  textShadow: "none"
+                }}
+                placeholder="Ex: 100.00"
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold", textShadow: "none" }}>
+                Valor por Hora (R$):
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={weeklyMetaValues.valorHora}
+                onChange={(e) => setWeeklyMetaValues(prev => ({ ...prev, valorHora: e.target.value }))}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  textShadow: "none"
+                }}
+                placeholder="Ex: 15.00"
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                style={{
+                  flex: 1,
+                  background: "#1976d2",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "12px 24px",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  fontWeight: "bold"
+                }}
+                onClick={handleSaveWeeklyMeta}
+              >
+                Salvar
+              </button>
+              <button
+                style={{
+                  flex: 1,
+                  background: "#757575",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "12px 24px",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  fontWeight: "bold"
+                }}
+                onClick={() => setShowWeeklyMetaModal(false)}
+              >
+                Cancelar
               </button>
             </div>
           </div>

@@ -272,21 +272,64 @@ p {
 
 /* Banner de informações do colaborador */
 .employee-info-banner {
-  text-align: center;
-  margin: 20px auto;
+  margin: 15px auto;
   padding: 12px;
   background: #007bff;
-  border-radius: 8px;
-  max-width: 600px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  max-width: 100vh;
+  width: 100%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.employee-info-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .employee-info-title {
   margin: 0;
   color: #fff;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: bold;
   text-shadow: none;
+  text-align: center;
+}
+
+/* Informações da meta - compacta */
+.meta-info-compact {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.meta-badge {
+  color: #ffd54f;
+  font-style: italic;
+}
+
+/* Botão de definir meta */
+.btn-define-meta {
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: background 0.2s ease;
+}
+
+.btn-define-meta:hover {
+  background: #45a049;
+}
+
+.btn-define-meta:active {
+  background: #3d8b40;
 }
 
 /* Estilos para resumos de horas e valores */
