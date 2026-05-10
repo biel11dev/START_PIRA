@@ -11,9 +11,9 @@
 }
 
 .desp {
-  position: fixed;
+  position: flex;
   top: 50px;
-  left: 50%;
+  margin-left: 18%;
   transform: translateX(-50%);
   background-color: transparent;
   padding: 10px;

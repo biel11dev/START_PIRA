@@ -2,6 +2,7 @@ import React, { useContext, useState } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import Acessos from "./Acessos";
 import "./App.css";
+import Auditoria from "./Auditoria";
 import { AuthContext } from "./AuthContext"; // Importa o contexto de autenticação
 import BaseProduto from "./BaseProduto";
 import CashRegister from "./CashRegister";
@@ -147,6 +148,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Acessos />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/auditoria"
+            element={
+              <ProtectedRoute>
+                <Auditoria />
               </ProtectedRoute>
             }
           />

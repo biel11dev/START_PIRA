@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: false,
     token: null,
     userName: null,
-    permissions: { caixa: false, produtos: false, maquinas: false, fiado: false, despesas: false, ponto: false, acessos: false, base_produto: false, pdv: false, pessoal: false },
+    permissions: { caixa: false, produtos: false, maquinas: false, fiado: false, despesas: false, ponto: false, acessos: false, base_produto: false, pdv: false, pessoal: false, auditoria: false },
   });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -29,7 +29,8 @@ export const AuthProvider = ({ children }) => {
         acessos: false,
         base_produto: false,
         pdv: false,
-        pessoal: false
+        pessoal: false,
+        auditoria: false
       };
       if (token) {
         try {
@@ -76,7 +77,8 @@ export const AuthProvider = ({ children }) => {
         acessos: false,
         base_produto: false,
         pdv: false,
-        pessoal: false
+        pessoal: false,
+        auditoria: false
       },
     });
     navigate("/");

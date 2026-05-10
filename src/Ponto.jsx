@@ -54,7 +54,8 @@ const Ponto = () => {
   const [weeklyMetaValues, setWeeklyMetaValues] = useState({
     metaHoras: "",
     bonificacao: "",
-    valorHora: ""
+    valorHora: "",
+    metasExtras: []
   });
   const [selectedWeekForMeta, setSelectedWeekForMeta] = useState(null);
 
@@ -67,12 +68,19 @@ const Ponto = () => {
   }, []);
 
   // Função para abrir detalhes do funcionário
-  const openEmployeeDetails = (employee) => {
-    setSelectedEmployeeForDetails(employee);
+  const openEmployeeDetails = async (employee) => {
+    // Buscar dados frescos do funcionário para garantir metasExtras atualizado
+    let freshEmployee = employee;
+    try {
+      const resp = await axios.get(`https://api-start-pira.vercel.app/api/employees`);
+      const found = resp.data.find(e => e.id === employee.id);
+      if (found) freshEmployee = { ...employee, ...found };
+    } catch (e) { /* usa o employee atual */ }
+    setSelectedEmployeeForDetails(freshEmployee);
     setEditEmployeeValues({
-      contato: employee.contato || "",
-      dataEntrada: employee.dataEntrada ? employee.dataEntrada.split('T')[0] : "",
-      ativo: employee.ativo !== false
+      contato: freshEmployee.contato || "",
+      dataEntrada: freshEmployee.dataEntrada ? freshEmployee.dataEntrada.split('T')[0] : "",
+      ativo: freshEmployee.ativo !== false
     });
     setIsEditingInModal(false);
     setShowEmployeeDetails(true);
@@ -904,6 +912,7 @@ const Ponto = () => {
   valorHora: "",
   metaHoras: "",
   bonificacao: "",
+  metasExtras: [],
 });
 
 // Calcular valores de bonificação quando os dados mudarem
@@ -976,6 +985,9 @@ useEffect(() => {
       : "",
     metaHoras: selectedEmployee?.metaHoras || "",
     bonificacao: selectedEmployee?.bonificacao || "",
+    metasExtras: selectedEmployee?.metasExtras 
+      ? (typeof selectedEmployee.metasExtras === 'string' ? JSON.parse(selectedEmployee.metasExtras) : selectedEmployee.metasExtras)
+      : [],
   });
 }, [selectedEmployeeId, employees]);
 
@@ -991,6 +1003,7 @@ const handleSaveEdit = () => {
     valorHora: parseFloat(editValues.valorHora.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
     metaHoras: parseFloat(editValues.metaHoras) || 0,
     bonificacao: parseFloat(editValues.bonificacao) || 0,
+    metasExtras: editValues.metasExtras || [],
   });
 };
 
@@ -1292,6 +1305,11 @@ const handleSaveEdit = () => {
       await axios.put(`https://api-start-pira.vercel.app/api/employees/${id}`, updatedData);
 
       setEmployees((prev) => prev.map((employee) => (employee.id === id ? { ...employee, ...updatedData } : employee)));
+
+      // Atualizar dados do modal de detalhes se estiver aberto para este funcionário
+      if (selectedEmployeeForDetails && selectedEmployeeForDetails.id === id) {
+        setSelectedEmployeeForDetails(prev => ({ ...prev, ...updatedData }));
+      }
       
       if (!metaChanged) {
         setMessage({ show: true, text: "Dados atualizados com sucesso!", type: "success" });
@@ -1336,10 +1354,14 @@ const handleSaveEdit = () => {
   const handleOpenWeeklyMetaModal = (employee, weekStart) => {
     setWeeklyMetaEmployee(employee);
     setSelectedWeekForMeta(weekStart);
+    const extras = employee.metasExtras
+      ? (typeof employee.metasExtras === 'string' ? JSON.parse(employee.metasExtras) : employee.metasExtras)
+      : [];
     setWeeklyMetaValues({
       metaHoras: employee.metaHoras || "",
       bonificacao: employee.bonificacao || "",
-      valorHora: employee.valorHora || ""
+      valorHora: employee.valorHora || "",
+      metasExtras: extras
     });
     setShowWeeklyMetaModal(true);
   };
@@ -1362,7 +1384,8 @@ const handleSaveEdit = () => {
         month,
         metaHoras: parseFloat(weeklyMetaValues.metaHoras) || 0,
         bonificacao: parseFloat(weeklyMetaValues.bonificacao) || 0,
-        valorHora: parseFloat(weeklyMetaValues.valorHora) || 0
+        valorHora: parseFloat(weeklyMetaValues.valorHora) || 0,
+        metasExtras: weeklyMetaValues.metasExtras || []
       });
 
       setMessage({ 
@@ -1575,23 +1598,34 @@ const handleSaveEdit = () => {
     let bonificacao = parseFloat(employee.bonificacao) || 0;
     let valorHora = parseFloat(employee.valorHora) || 0;
 
+    // Carregar metasExtras da resposta da API
+    let metasExtras = [];
     if (weekPoints.length > 0) {
       try {
-        // Usar a primeira data dos pontos para buscar a meta (busca por range weekStart-weekEnd)
         const firstPointDate = parseISODate(weekPoints[0].date).toISOString().split('T')[0];
-        const response = await axios.get(
+        const metaResp = await axios.get(
           `https://api-start-pira.vercel.app/api/employee-weekly-meta/${employee.id}`,
           { params: { date: firstPointDate } }
         );
-        
-        if (response.data && !response.data.isDefault) {
-          metaHoras = parseFloat(response.data.metaHoras) || 0;
-          bonificacao = parseFloat(response.data.bonificacao) || 0;
-          valorHora = parseFloat(response.data.valorHora) || valorHora;
+        if (metaResp.data) {
+          if (!metaResp.data.isDefault) {
+            metaHoras = parseFloat(metaResp.data.metaHoras) || 0;
+            bonificacao = parseFloat(metaResp.data.bonificacao) || 0;
+            valorHora = parseFloat(metaResp.data.valorHora) || valorHora;
+          }
+          // metasExtras already included in both default and specific responses
+          if (metaResp.data.metasExtras) {
+            metasExtras = Array.isArray(metaResp.data.metasExtras)
+              ? metaResp.data.metasExtras
+              : JSON.parse(metaResp.data.metasExtras);
+          } else if (employee.metasExtras) {
+            metasExtras = Array.isArray(employee.metasExtras)
+              ? employee.metasExtras
+              : JSON.parse(employee.metasExtras);
+          }
         }
       } catch (error) {
         console.error("Erro ao buscar meta semanal, usando valores padrão:", error);
-        // Continua com valores padrão do employee
       }
     }
 
@@ -1608,16 +1642,42 @@ const handleSaveEdit = () => {
     const weekWorkedHours = weekWorkedMin / 60;
     const valorBase = weekWorkedHours * valorHora;
     
-    // Verificar bonificação semanal
-    const temBonificacao = metaHoras > 0 && weekWorkedHours >= metaHoras && bonificacao > 0;
+    // Verificar bonificação: usar o maior nível atingido entre meta1 e metasExtras
+    // Construir lista completa de tiers (tier principal + extras), ordenados por metaHoras desc
+    const allTiers = [];
+    if (metaHoras > 0 && bonificacao > 0) {
+      allTiers.push({ metaHoras, bonificacao });
+    }
+    if (Array.isArray(metasExtras)) {
+      metasExtras.forEach(t => {
+        const mh = parseFloat(t.metaHoras);
+        const bn = parseFloat(t.bonificacao);
+        if (mh > 0 && bn > 0) allTiers.push({ metaHoras: mh, bonificacao: bn });
+      });
+    }
+    // Ordenar do maior para o menor
+    allTiers.sort((a, b) => b.metaHoras - a.metaHoras);
+
+    let bonificacaoGanha = 0;
+    let metaAtingida = null;
+    let temBonificacao = false;
+    for (const tier of allTiers) {
+      if (weekWorkedHours >= tier.metaHoras) {
+        bonificacaoGanha = tier.bonificacao;
+        metaAtingida = tier.metaHoras;
+        temBonificacao = true;
+        break;
+      }
+    }
     
     return {
       valorBase,
-      bonificacao: temBonificacao ? bonificacao : 0,
+      bonificacao: bonificacaoGanha,
       temBonificacao,
       totalHoras: weekWorkedHours,
-      metaHoras,
-      valorHora
+      metaHoras: metaAtingida || metaHoras,
+      valorHora,
+      allTiers
     };
   };
 
@@ -2082,6 +2142,54 @@ const handleSaveEdit = () => {
           value={editValues.bonificacao || ""}
           onChange={e => handleEditChange("bonificacao", e.target.value)}
         /> 
+      </div>
+
+      {/* Metas extras */}
+      <div style={{ marginBottom: 12, textAlign: "left" }}>
+        <label style={{ fontWeight: "bold", textShadow: "none", display: "block", marginBottom: 6 }}>
+          Metas adicionais de bônus:
+        </label>
+        {(editValues.metasExtras || []).map((tier, idx) => (
+          <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <span style={{ fontSize: 12, color: "#555", minWidth: 20, textShadow: "none" }}>#{idx + 2}</span>
+            <input
+              type="number" step="0.5" min="0" placeholder="Horas"
+              value={tier.metaHoras || ""}
+              onChange={e => {
+                const updated = [...(editValues.metasExtras || [])];
+                updated[idx] = { ...updated[idx], metaHoras: e.target.value };
+                handleEditChange("metasExtras", updated);
+              }}
+              style={{ width: 80, padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, fontSize: 13, textShadow: "none" }}
+            />
+            <span style={{ fontSize: 12, textShadow: "none" }}>h →</span>
+            <input
+              type="number" step="0.01" min="0" placeholder="Bônus R$"
+              value={tier.bonificacao || ""}
+              onChange={e => {
+                const updated = [...(editValues.metasExtras || [])];
+                updated[idx] = { ...updated[idx], bonificacao: e.target.value };
+                handleEditChange("metasExtras", updated);
+              }}
+              style={{ width: 90, padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, fontSize: 13, textShadow: "none" }}
+            />
+            <button
+              onClick={() => {
+                const updated = (editValues.metasExtras || []).filter((_, i) => i !== idx);
+                handleEditChange("metasExtras", updated);
+              }}
+              style={{ background: "#f44336", color: "#fff", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 12, textShadow: "none" }}
+            >✕</button>
+          </div>
+        ))}
+        {(editValues.metasExtras || []).length < 3 && (
+          <button
+            onClick={() => handleEditChange("metasExtras", [...(editValues.metasExtras || []), { metaHoras: "", bonificacao: "" }])}
+            style={{ background: "#1976d2", color: "#fff", border: "none", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 12, marginTop: 2 }}
+          >
+            + Adicionar meta
+          </button>
+        )}
       </div>
       <div>
         <button
@@ -2713,6 +2821,34 @@ const handleSaveEdit = () => {
                   }
                 </p>
               </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <strong>Metas Adicionais de Bônus:</strong>
+                {(() => {
+                  const extras = selectedEmployeeForDetails.metasExtras
+                    ? (typeof selectedEmployeeForDetails.metasExtras === 'string'
+                        ? JSON.parse(selectedEmployeeForDetails.metasExtras)
+                        : selectedEmployeeForDetails.metasExtras)
+                    : [];
+                  if (!extras || extras.length === 0) {
+                    return <p style={{ margin: "4px 0", color: "#aaa", fontStyle: "italic", textShadow: "none" }}>Nenhuma meta adicional cadastrada.</p>;
+                  }
+                  return (
+                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {extras.map((tier, idx) => (
+                        <div key={idx} style={{
+                          display: "flex", alignItems: "center", gap: 10,
+                          background: "#e8f5e9", borderRadius: 6, padding: "6px 12px",
+                          border: "1px solid #a5d6a7"
+                        }}>
+                          <span style={{ fontWeight: "bold", color: "#388e3c", minWidth: 24, textShadow: "none" }}>#{idx + 2}</span>
+                          <span style={{ color: "#333", textShadow: "none" }}>🕐 Meta: <strong>{tier.metaHoras}h</strong></span>
+                          <span style={{ color: "#1976d2", textShadow: "none" }}>💰 Bônus: <strong>R$ {parseFloat(tier.bonificacao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
               <div>
                 <strong>Contato:</strong>
                 {isEditingInModal ? (
@@ -3143,6 +3279,57 @@ const handleSaveEdit = () => {
                 }}
                 placeholder="Ex: 15.00"
               />
+            </div>
+
+            {/* Metas extras */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold", textShadow: "none" }}>
+                Metas adicionais de bônus:
+              </label>
+              {(weeklyMetaValues.metasExtras || []).map((tier, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: "#555", minWidth: 24 }}>#{idx + 2}</span>
+                  <input
+                    type="number" step="0.5" min="0" placeholder="Horas"
+                    value={tier.metaHoras || ""}
+                    onChange={e => {
+                      const updated = [...(weeklyMetaValues.metasExtras || [])];
+                      updated[idx] = { ...updated[idx], metaHoras: e.target.value };
+                      setWeeklyMetaValues(prev => ({ ...prev, metasExtras: updated }));
+                    }}
+                    style={{ flex: 1, padding: "6px 8px", border: "1px solid #ccc", borderRadius: 4, fontSize: 13 }}
+                  />
+                  <span style={{ fontSize: 12 }}>h →</span>
+                  <input
+                    type="number" step="0.01" min="0" placeholder="Bônus R$"
+                    value={tier.bonificacao || ""}
+                    onChange={e => {
+                      const updated = [...(weeklyMetaValues.metasExtras || [])];
+                      updated[idx] = { ...updated[idx], bonificacao: e.target.value };
+                      setWeeklyMetaValues(prev => ({ ...prev, metasExtras: updated }));
+                    }}
+                    style={{ flex: 1, padding: "6px 8px", border: "1px solid #ccc", borderRadius: 4, fontSize: 13 }}
+                  />
+                  <button
+                    onClick={() => {
+                      const updated = (weeklyMetaValues.metasExtras || []).filter((_, i) => i !== idx);
+                      setWeeklyMetaValues(prev => ({ ...prev, metasExtras: updated }));
+                    }}
+                    style={{ background: "#f44336", color: "#fff", border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 12 }}
+                  >✕</button>
+                </div>
+              ))}
+              {(weeklyMetaValues.metasExtras || []).length < 3 && (
+                <button
+                  onClick={() => setWeeklyMetaValues(prev => ({
+                    ...prev,
+                    metasExtras: [...(prev.metasExtras || []), { metaHoras: "", bonificacao: "" }]
+                  }))}
+                  style={{ background: "#1976d2", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer", fontSize: 13, marginTop: 2 }}
+                >
+                  + Adicionar meta
+                </button>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: "10px" }}>

@@ -19,7 +19,7 @@
 
 /* Título */
 .pessoal-title {
-  position: fixed;
+  position: flex;
   top: 50px;
   left: 50%;
   transform: translateX(-50%);
