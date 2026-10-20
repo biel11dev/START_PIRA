@@ -145,10 +145,14 @@ const ClientDetails = ({ clients, setClients }) => {
             })
             .catch((error) => {
               console.error("Erro ao atualizar totalDebt do cliente:", error);
+              setMessage({ type: "error", text: "Compra excluída, mas houve erro ao atualizar o saldo do cliente." });
+              setTimeout(() => setMessage(null), 3000);
             });
         })
         .catch((error) => {
           console.error("Erro ao excluir compra:", error);
+          setMessage({ type: "error", text: error.response?.data?.error || "Erro ao excluir compra!" });
+          setTimeout(() => setMessage(null), 3000);
         });
     }
   };
@@ -167,10 +171,14 @@ const ClientDetails = ({ clients, setClients }) => {
             })
             .catch((error) => {
               console.error("Erro ao atualizar totalDebt do cliente:", error);
+              setMessage({ type: "error", text: "Pagamento excluído, mas houve erro ao atualizar o saldo do cliente." });
+              setTimeout(() => setMessage(null), 3000);
             });
         })
         .catch((error) => {
           console.error("Erro ao excluir pagamento:", error);
+          setMessage({ type: "error", text: error.response?.data?.error || "Erro ao excluir pagamento!" });
+          setTimeout(() => setMessage(null), 3000);
         });
     }
   };
@@ -204,7 +212,9 @@ const ClientDetails = ({ clients, setClients }) => {
           setEditingPurchaseData({});
         })
         .catch((error) => {
-          console.error("Erro ao atualizar compra:", error.response.data);
+          console.error("Erro ao atualizar compra:", error.response?.data || error.message);
+          setMessage({ type: "error", text: error.response?.data?.error || "Erro ao atualizar compra!" });
+          setTimeout(() => setMessage(null), 3000);
         });
     }
   };
@@ -222,7 +232,9 @@ const ClientDetails = ({ clients, setClients }) => {
           setEditingPaymentData({});
         })
         .catch((error) => {
-          console.error("PUT /payments/:id", updateData, "Erro ao atualizar pagamento:", error.response.data);
+          console.error("Erro ao atualizar pagamento:", error.response?.data || error.message);
+          setMessage({ type: "error", text: error.response?.data?.error || "Erro ao atualizar pagamento!" });
+          setTimeout(() => setMessage(null), 3000);
         });
     }
   };

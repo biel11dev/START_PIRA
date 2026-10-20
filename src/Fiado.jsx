@@ -8,6 +8,7 @@ import Message from "./Message";
 const Fiado = ({ clients, setClients }) => {
   const [newClient, setNewClient] = useState("");
   const [confirmDelete, setConfirmDelete] = useState({ show: false, id: null });
+  const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false); // Estado de carregamento
   const navigate = useNavigate();
 
@@ -34,6 +35,8 @@ const Fiado = ({ clients, setClients }) => {
         })
         .catch((error) => {
           console.error("Erro ao adicionar cliente:", error);
+          setErrorMessage(error.response?.data?.error || "Erro ao adicionar cliente!");
+          setTimeout(() => setErrorMessage(""), 4000);
         })
         .finally(() => {
           setIsLoading(false); // Desativa o estado de carregamento
@@ -55,6 +58,9 @@ const Fiado = ({ clients, setClients }) => {
       })
       .catch((error) => {
         console.error("Erro ao deletar cliente:", error);
+        setConfirmDelete({ show: false, id: null });
+        setErrorMessage(error.response?.data?.error || "Erro ao excluir cliente!");
+        setTimeout(() => setErrorMessage(""), 4000);
       });
   };
 
@@ -89,6 +95,7 @@ const Fiado = ({ clients, setClients }) => {
         ))}
       </ul>
       {confirmDelete.show && <Message message="Deseja realmente excluir o cliente?" type="warning" onClose={cancelDeleteClient} onConfirm={confirmDeleteClient} />}
+      {errorMessage && <Message message={errorMessage} type="error" onClose={() => setErrorMessage("")} />}
     </div>
   );
 };

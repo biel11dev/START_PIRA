@@ -1,12 +1,16 @@
-input,
-select,
-textarea {
-  color: black !important; /* Define a cor do texto como preta */
-  background-color: white; /* Define a cor de fundo como branca */
+body {
+  height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-body {
-  height: 100vh; /* Ajusta a altura para ocupar toda a tela */
-  width: 100%; /* Ajusta a largura para ocupar toda a tela */
-  box-sizing: border-box; /* Inclui padding e border no tamanho total */
+/* Remove setas (spinners) de todos os inputs numéricos */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }

@@ -7,7 +7,7 @@
 .client-details-container h2 {
   margin-bottom: 20px;
   color: #fff;
-  position: flex;
+  position: fixed;
   margin-top: 15px; /* Adiciona espaçamento no topo */
   top: 0;
   left: 55%;

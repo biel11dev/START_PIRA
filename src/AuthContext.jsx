@@ -84,5 +84,31 @@ export const AuthProvider = ({ children }) => {
     navigate("/");
   };
 
-  return <AuthContext.Provider value={{ auth, login, logout, loading }}>{!loading && children}</AuthContext.Provider>;
+  // Registra o logout no servidor; com ponto automático habilitado pede confirmação do horário de saída.
+  const requestLogout = async () => {
+    const headers = { Authorization: `Bearer ${auth.token}` };
+    let status = null;
+    try {
+      const res = await axios.get("https://api-start-pira.vercel.app/api/ponto-auto/status", { headers, timeout: 8000 });
+      status = res.data;
+    } catch (error) {
+      console.warn("Falha ao consultar ponto automático:", error.message);
+    }
+
+    if (status?.autoPonto) {
+      const confirmou = window.confirm(
+        `Você está saindo às ${status.exitTime}. Confirmar?\nEsse horário será registrado como sua saída no ponto.`
+      );
+      if (!confirmou) return;
+    }
+
+    try {
+      await axios.post("https://api-start-pira.vercel.app/api/logout", null, { headers, timeout: 8000 });
+    } catch (error) {
+      console.warn("Falha ao registrar logout no servidor:", error.message);
+    }
+    logout();
+  };
+
+  return <AuthContext.Provider value={{ auth, login, logout, requestLogout, loading }}>{!loading && children}</AuthContext.Provider>;
 };

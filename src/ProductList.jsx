@@ -1,6 +1,6 @@
 import axios from "axios";
 import React, { useEffect, useState } from "react";
-import { FaSpinner } from "react-icons/fa";
+import { FaSpinner, FaShoppingCart, FaBell, FaRedo, FaCheck } from "react-icons/fa";
 import * as XLSX from "xlsx";
 import Message from "./Message";
 import "./ProductList.css";
@@ -10,6 +10,7 @@ const ProductList = () => {
   const [newProduct, setNewProduct] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("Unidade");
+  const [baseUnit, setBaseUnit] = useState("");
   const [value, setPreco] = useState("");
   const [valuecusto, setPrecoCusto] = useState("");
   const [message, setMessage] = useState(null);
@@ -18,8 +19,12 @@ const ProductList = () => {
   const [editingProductData, setEditingProductData] = useState({});
   const [newUnit, setNewUnit] = useState("");
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
+  const [unitFilter, setUnitFilter] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSave, setIsLoadingSave] = useState(false);
+  const [isUnitPricesModalOpen, setIsUnitPricesModalOpen] = useState(false);
+  const [newProductUnitPrices, setNewProductUnitPrices] = useState({});
+  const [unitPriceAddSel, setUnitPriceAddSel] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredProducts, setFilteredProducts] = useState([]);
   
@@ -36,18 +41,20 @@ const ProductList = () => {
   
   // Estados para equivalência de unidades
   const [isUnitEquivalenceModalOpen, setIsUnitEquivalenceModalOpen] = useState(false);
+  const [unitType, setUnitType] = useState("empacotada"); // "empacotada" | "porcao"
   const [selectedUnitForEquivalence, setSelectedUnitForEquivalence] = useState("");
   const [unitEquivalence, setUnitEquivalence] = useState("");
+  const [fractionalValue, setFractionalValue] = useState(""); // quantas porções saem de 1 unidade-pai
   const [unitEquivalences, setUnitEquivalences] = useState({});
 
-  // Estados para ordenação
-  const [sortField, setSortField] = useState("");
-  const [sortOrder, setSortOrder] = useState("asc"); // "asc" ou "desc"
+  // Estado de abas
+  const [activeTab, setActiveTab] = useState("base"); // "base" | "compras"
 
-  // Estados para auto-complete
-  const [productSuggestions, setProductSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [allProductNames, setAllProductNames] = useState([]);
+  // ============ LISTA DE COMPRAS ============
+  const [listaCompras, setListaCompras] = useState([]);
+  const [listaFiltro, setListaFiltro] = useState("PENDENTE");
+  const [isLoadingLista, setIsLoadingLista] = useState(false);
+  const [expandedListaGroups, setExpandedListaGroups] = useState({});
 
   useEffect(() => {
     axios
@@ -55,15 +62,35 @@ const ProductList = () => {
       .then((response) => {
         setProducts(response.data);
         setFilteredProducts(response.data);
-        // Extrair nomes únicos para auto-complete
-        const uniqueNames = [...new Set(response.data.map(product => product.name))];
-        setAllProductNames(uniqueNames);
-        console.log("Produtos carregados:", response.data);
       })
       .catch((error) => {
         console.error("Erro ao buscar produtos:", error);
       });
   }, []);
+
+  useEffect(() => {
+    fetchListaCompras();
+  }, []);
+
+  const fetchListaCompras = () => {
+    setIsLoadingLista(true);
+    axios.get("https://api-start-pira.vercel.app/api/lista-compras")
+      .then(res => setListaCompras(res.data))
+      .catch(err => console.error("Erro ao buscar lista de compras:", err))
+      .finally(() => setIsLoadingLista(false));
+  };
+
+  const handleConcluirListaItem = (id) => {
+    axios.put(`https://api-start-pira.vercel.app/api/lista-compras/${id}/concluir`)
+      .then(() => fetchListaCompras())
+      .catch(() => setMessage({ show: true, text: "Erro ao concluir item!", type: "error" }));
+  };
+
+  const handleReabrirListaItem = (id) => {
+    axios.put(`https://api-start-pira.vercel.app/api/lista-compras/${id}/reabrir`)
+      .then(() => fetchListaCompras())
+      .catch(() => setMessage({ show: true, text: "Erro ao reabrir item!", type: "error" }));
+  };
 
   useEffect(() => {
     axios
@@ -101,56 +128,11 @@ const ProductList = () => {
   }, []);
 
   useEffect(() => {
-    let filtered = products.filter(
+    const filtered = products.filter(
       (product) => product.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-
-    // Aplicar ordenação
-    if (sortField) {
-      filtered = [...filtered].sort((a, b) => {
-        let aValue, bValue;
-
-        switch (sortField) {
-          case "name":
-            aValue = a.name.toLowerCase();
-            bValue = b.name.toLowerCase();
-            break;
-          case "quantity":
-            aValue = parseFloat(a.quantity) || 0;
-            bValue = parseFloat(b.quantity) || 0;
-            break;
-          case "value":
-            aValue = parseFloat(a.value) || 0;
-            bValue = parseFloat(b.value) || 0;
-            break;
-          case "valuecusto":
-            aValue = parseFloat(a.valuecusto) || 0;
-            bValue = parseFloat(b.valuecusto) || 0;
-            break;
-          default:
-            return 0;
-        }
-
-        if (sortOrder === "asc") {
-          return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-        } else {
-          return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-        }
-      });
-    }
-
     setFilteredProducts(filtered);
-  }, [searchTerm, products, sortField, sortOrder]);
-
-  // Calcular custo automaticamente: VALOR x QUANTIDADE
-  useEffect(() => {
-    if (value && quantity) {
-      const valorNumerico = parseCurrencyInput(value);
-      const calculatedCost = valorNumerico * parseFloat(quantity);
-      const formatted = formatCurrencyInput((calculatedCost * 100).toFixed(0));
-      setPrecoCusto(formatted);
-    }
-  }, [value, quantity]);
+  }, [searchTerm, products]);
 
   useEffect(() => {
     if (!isCategoryModalOpen) return;
@@ -168,45 +150,28 @@ const ProductList = () => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
   };
 
-  const formatCurrencyInput = (value) => {
-    const numbers = value.replace(/\D/g, "");
-    const amount = Number(numbers) / 100;
-    return amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-  const parseCurrencyInput = (value) => {
-    const numbers = value.replace(/\./g, "").replace(",", ".");
-    return parseFloat(numbers) || 0;
-  };
-
   const handleAddProduct = () => {
-    if (newProduct.trim() !== "" && quantity.trim() !== "" && value.trim() !== "" && valuecusto.trim() !== "") {
+    if (newProduct.trim() !== ""  && value.trim() !== "" && valuecusto.trim() !== "") {
       setIsLoading(true);
       const categoryId = selectedCategory ? parseInt(selectedCategory) : null;
-      let valorNumerico = parseCurrencyInput(value);
-      const custoNumerico = parseCurrencyInput(valuecusto);
-      
-      // Se o valor estiver zerado, usar o custo como valor
-      if (valorNumerico === 0) {
-        valorNumerico = custoNumerico;
-      }
-      
       axios
         .post("https://api-start-pira.vercel.app/api/products", { 
           name: newProduct, 
-          quantity, 
           unit, 
-          value: valorNumerico, 
-          valuecusto: custoNumerico, 
-          categoryId 
+          value, 
+          valuecusto, 
+          categoryId,
+          baseUnit: baseUnit || null,
+          unitPrices: newProductUnitPrices && typeof newProductUnitPrices === "object" ? newProductUnitPrices : {}
         })
         .then((response) => {
           setProducts([...products, response.data]);
           setNewProduct("");
-          setQuantity("");
           setUnit("Unidade");
+          setBaseUnit("");
           setPreco("");
           setPrecoCusto("");
+          setNewProductUnitPrices({});
           setSelectedCategory("");
           setMessage({ show: true, text: "Produto adicionado com sucesso!", type: "success" });
           setTimeout(() => setMessage(null), 3000);
@@ -249,53 +214,68 @@ const ProductList = () => {
   };
 
   const handleSaveUnitEquivalence = () => {
-    if (unitEquivalence.trim() !== "" && !isNaN(unitEquivalence) && parseFloat(unitEquivalence) > 0) {
-      const isEditing = unitEquivalences[selectedUnitForEquivalence];
-      const equivalenceValue = parseFloat(unitEquivalence);
-      
-      const apiCall = isEditing 
-        ? axios.put(`https://api-start-pira.vercel.app/api/unit-equivalences/${selectedUnitForEquivalence}`, {
-            value: equivalenceValue
-          })
-        : axios.post("https://api-start-pira.vercel.app/api/unit-equivalences", {
-            unitName: selectedUnitForEquivalence,
-            value: equivalenceValue
-          });
+    const isPorcao = unitType === "porcao";
+    const equivalenceValue = isPorcao ? 1 : parseFloat(unitEquivalence);
+    const fractionalVal = parseFloat(fractionalValue);
 
-      apiCall
-        .then(() => {
-          setUnitEquivalences({
-            ...unitEquivalences,
-            [selectedUnitForEquivalence]: equivalenceValue
-          });
-          
-          if (!isEditing) {
-            setUnit(selectedUnitForEquivalence);
-          }
-          
-          setIsUnitEquivalenceModalOpen(false);
-          setSelectedUnitForEquivalence("");
-          setUnitEquivalence("");
-          setMessage({ 
-            show: true, 
-            text: `Equivalência ${isEditing ? 'atualizada' : 'definida'}: 1 ${selectedUnitForEquivalence} = ${equivalenceValue} Unidades`, 
-            type: "success" 
-          });
-          setTimeout(() => setMessage(null), 3000);
-        })
-        .catch((error) => {
-          console.error("Erro ao salvar equivalência:", error);
-          if (error.response?.status === 409) {
-            setMessage({ show: true, text: "Esta unidade já possui equivalência definida!", type: "error" });
-          } else {
-            setMessage({ show: true, text: "Erro ao salvar equivalência!", type: "error" });
-          }
-          setTimeout(() => setMessage(null), 3000);
-        });
-    } else {
+    if (!isPorcao && (unitEquivalence.trim() === "" || isNaN(equivalenceValue) || equivalenceValue <= 0)) {
       setMessage({ show: true, text: "Digite um número válido maior que zero!", type: "error" });
       setTimeout(() => setMessage(null), 3000);
+      return;
     }
+    if (isPorcao && (fractionalValue.trim() === "" || isNaN(fractionalVal) || fractionalVal <= 0)) {
+      setMessage({ show: true, text: "Informe um valor maior que zero para a equivalência (ex: 0,5 para meia unidade ou 9 para 1 Garrafa → 9 Doses)!", type: "error" });
+      setTimeout(() => setMessage(null), 3000);
+      return;
+    }
+
+    const isEditing = unitEquivalences[selectedUnitForEquivalence] !== undefined;
+
+    const payload = isPorcao
+      ? { isFractional: true, fractionalValue: fractionalVal }
+      : { value: equivalenceValue, isFractional: false };
+      
+    const apiCall = isEditing 
+      ? axios.put(`https://api-start-pira.vercel.app/api/unit-equivalences/${selectedUnitForEquivalence}`, payload)
+      : axios.post("https://api-start-pira.vercel.app/api/unit-equivalences", {
+          unitName: selectedUnitForEquivalence,
+          ...payload
+        });
+
+    apiCall
+      .then(() => {
+        setUnitEquivalences({
+          ...unitEquivalences,
+          [selectedUnitForEquivalence]: equivalenceValue
+        });
+        
+        if (!isEditing) {
+          setUnit(selectedUnitForEquivalence);
+        }
+        
+        setIsUnitEquivalenceModalOpen(false);
+        setSelectedUnitForEquivalence("");
+        setUnitEquivalence("");
+        setFractionalValue("");
+        setUnitType("empacotada");
+        setMessage({ 
+          show: true, 
+          text: isPorcao
+            ? `Unidade "${selectedUnitForEquivalence}" adicionada: 1 unidade-pai → ${fractionalVal} ${selectedUnitForEquivalence}(s)`
+            : `Equivalência ${isEditing ? 'atualizada' : 'definida'}: 1 ${selectedUnitForEquivalence} = ${equivalenceValue} Unidades`, 
+          type: "success" 
+        });
+        setTimeout(() => setMessage(null), 3000);
+      })
+      .catch((error) => {
+        console.error("Erro ao salvar equivalência:", error);
+        if (error.response?.status === 409) {
+          setMessage({ show: true, text: "Esta unidade já possui equivalência definida!", type: "error" });
+        } else {
+          setMessage({ show: true, text: "Erro ao salvar equivalência!", type: "error" });
+        }
+        setTimeout(() => setMessage(null), 3000);
+      });
   };
 
   const handleDeleteUnit = (unitToDelete) => {
@@ -321,6 +301,7 @@ const ProductList = () => {
   };
 
   const handleUnitSelection = (selectedUnit) => {
+    setUnitFilter("");
     if (selectedUnit !== "Unidade" && !unitEquivalences[selectedUnit]) {
       setSelectedUnitForEquivalence(selectedUnit);
       setIsUnitEquivalenceModalOpen(true);
@@ -333,52 +314,6 @@ const ProductList = () => {
     setSelectedUnitForEquivalence(unitName);
     setUnitEquivalence(unitEquivalences[unitName].toString());
     setIsUnitEquivalenceModalOpen(true);
-  };
-
-  // Funções de auto-complete
-  const handleProductInputChange = (e) => {
-    const value = e.target.value;
-    setNewProduct(value);
-    
-    if (value.length > 0) {
-      const filtered = allProductNames.filter(name =>
-        name.toLowerCase().includes(value.toLowerCase())
-      );
-      setProductSuggestions(filtered.slice(0, 25));
-      setShowSuggestions(true);
-    } else {
-      setProductSuggestions([]);
-      setShowSuggestions(false);
-    }
-  };
-
-  const handleSuggestionClick = (suggestion) => {
-    setNewProduct(suggestion);
-    setShowSuggestions(false);
-    setProductSuggestions([]);
-    
-    // Buscar dados do produto selecionado para preencher automaticamente
-    const selectedProduct = products.find(p => p.name === suggestion);
-    if (selectedProduct) {
-      setQuantity(selectedProduct.quantity.toString());
-      setUnit(selectedProduct.unit);
-      
-      // Se o valor estiver zerado, usar o custo como valor
-      const valorParaUsar = selectedProduct.value === 0 ? selectedProduct.valuecusto : selectedProduct.value;
-      const valorFormatado = formatCurrencyInput((valorParaUsar * 100).toFixed(0));
-      const custoFormatado = formatCurrencyInput((selectedProduct.valuecusto * 100).toFixed(0));
-      
-      setPreco(valorFormatado);
-      setPrecoCusto(custoFormatado);
-      setSelectedCategory(selectedProduct.categoryId?.toString() || "");
-    }
-  };
-
-  const handleProductInputBlur = () => {
-    // Delay para permitir o clique na sugestão
-    setTimeout(() => {
-      setShowSuggestions(false);
-    }, 200);
   };
 
   const handleAddCategory = () => {
@@ -439,49 +374,27 @@ const ProductList = () => {
   };
 
   const groupProductsByCategory = (products) => {
-    const hierarchy = {};
-    
-    products.forEach(product => {
-      let parentName = "Sem Categoria";
-      let subcategoryName = null;
-      
+    const groups = products.reduce((groups, product) => {
+      let categoryName = "Sem Categoria";
       if (product.category) {
         if (product.category.parent) {
-          // Produto tem subcategoria
-          parentName = product.category.parent.name;
-          subcategoryName = product.category.name;
+          categoryName = `${product.category.parent.name} > ${product.category.name}`;
         } else {
-          // Produto tem apenas categoria pai
-          parentName = product.category.name;
+          categoryName = product.category.name;
         }
       }
       
-      // Criar categoria pai se não existir
-      if (!hierarchy[parentName]) {
-        hierarchy[parentName] = {
-          totalCount: 0,
-          subcategories: {}
-        };
+      if (!groups[categoryName]) {
+        groups[categoryName] = [];
       }
-      
-      if (subcategoryName) {
-        // Adicionar à subcategoria
-        if (!hierarchy[parentName].subcategories[subcategoryName]) {
-          hierarchy[parentName].subcategories[subcategoryName] = [];
-        }
-        hierarchy[parentName].subcategories[subcategoryName].push(product);
-      } else {
-        // Adicionar direto à categoria pai (sem subcategoria)
-        if (!hierarchy[parentName].subcategories['_direct']) {
-          hierarchy[parentName].subcategories['_direct'] = [];
-        }
-        hierarchy[parentName].subcategories['_direct'].push(product);
-      }
-      
-      hierarchy[parentName].totalCount++;
+      groups[categoryName].push(product);
+      return groups;
+    }, {});
+    // Ordena os produtos de cada grupo alfabeticamente
+    Object.keys(groups).forEach((key) => {
+      groups[key].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
     });
-    
-    return hierarchy;
+    return groups;
   };
 
   const toggleGroup = (categoryName) => {
@@ -503,12 +416,16 @@ const ProductList = () => {
       value: product.value,
       valuecusto: product.valuecusto,
       categoryId: product.categoryId || "",
+      baseUnit: product.baseUnit || "",
+      pdvHiddenUnits: product.pdvHiddenUnits || [],
+      unitPrices: product.unitPrices && typeof product.unitPrices === "object" ? product.unitPrices : {},
+      _productUnits: [...new Set([product.unit, ...((product.estoqueItems || []).map(e => e.unit))].filter(Boolean))],
     });
   };
 
   const handleUpdateProduct = (id) => {
     setIsLoadingSave(true);
-    const { name, quantity, unit, value, valuecusto, categoryId } = editingProductData;
+    const { name, quantity, unit, value, valuecusto, categoryId, baseUnit, pdvHiddenUnits, unitPrices } = editingProductData;
     const finalCategoryId = categoryId ? parseInt(categoryId) : null;
     
     axios
@@ -518,7 +435,10 @@ const ProductList = () => {
         unit, 
         value, 
         valuecusto, 
-        categoryId: finalCategoryId 
+        categoryId: finalCategoryId,
+        baseUnit: baseUnit || null,
+        pdvHiddenUnits: Array.isArray(pdvHiddenUnits) ? pdvHiddenUnits : [],
+        unitPrices: unitPrices && typeof unitPrices === "object" ? unitPrices : {}
       })
       .then((response) => {
         const updatedProducts = products.map((product) => (product.id === id ? response.data : product));
@@ -589,8 +509,30 @@ const ProductList = () => {
 
   return (
     <div className="product-list-container">
-      <h2 className="fixed-title">Lista de Compras</h2>
+      <h2 className="fixed-title">Base de Cadastro</h2>
 
+      {/* Abas */}
+      <div className="pl-tabs">
+        <button
+          className={`pl-tab ${activeTab === "base" ? "pl-tab--active" : ""}`}
+          onClick={() => setActiveTab("base")}
+        >
+          Base de Cadastro
+        </button>
+        <button
+          className={`pl-tab ${activeTab === "compras" ? "pl-tab--active" : ""}`}
+          onClick={() => { setActiveTab("compras"); fetchListaCompras(); }}
+        >
+          <FaShoppingCart style={{ marginRight: 5 }} />
+          Lista de Compras
+          {listaCompras.filter(i => i.status === "PENDENTE").length > 0 && (
+            <span className="pl-tab-badge">{listaCompras.filter(i => i.status === "PENDENTE").length}</span>
+          )}
+        </button>
+      </div>
+
+      {/* ===== ABA BASE DE CADASTRO ===== */}
+      {activeTab === "base" && (<>
       <div className="search-bar">
         <input
           type="text"
@@ -622,6 +564,137 @@ const ProductList = () => {
           </div>
         </div>
       )}
+
+      {isUnitPricesModalOpen && (() => {
+        const creating = editingProduct === null;
+        const up = creating ? (newProductUnitPrices || {}) : (editingProductData.unitPrices || {});
+        const prodName = creating ? (newProduct || "Novo produto") : editingProductData.name;
+        const defValue = creating ? value : editingProductData.value;
+        const defCost = creating ? valuecusto : editingProductData.valuecusto;
+        // Só as unidades comercializáveis DESTE produto:
+        // na criação, a(s) unidade(s) definida(s) no formulário; na edição, unidade + itens de estoque.
+        const baseUnits = creating
+          ? [...new Set([unit, baseUnit].filter(Boolean))]
+          : (editingProductData._productUnits || []);
+        // Inclui também as unidades já configuradas em unitPrices (adicionadas manualmente).
+        const allUnits = [...new Set([...baseUnits, ...Object.keys(up)])];
+        // Unidades do catálogo global ainda não usadas por este produto.
+        const addableUnits = Object.keys(unitEquivalences).filter((u) => !allUnits.includes(u));
+        const setUP = (u, field, val) => {
+          const apply = (prev) => {
+            const next = { ...(prev || {}) };
+            const entry = { ...(next[u] || {}) };
+            if (val === "") delete entry[field];
+            else entry[field] = parseFloat(val);
+            if (Object.keys(entry).length === 0) delete next[u];
+            else next[u] = entry;
+            return next;
+          };
+          if (creating) setNewProductUnitPrices((prev) => apply(prev));
+          else setEditingProductData((prev) => ({ ...prev, unitPrices: apply(prev.unitPrices) }));
+        };
+        // Adiciona uma unidade comercializável (pré-preenchida com os valores padrão do produto).
+        const addUnit = (u) => {
+          if (!u) return;
+          const apply = (prev) => {
+            const next = { ...(prev || {}) };
+            if (!next[u]) {
+              next[u] = {
+                value: parseFloat(defValue) || 0,
+                cost: parseFloat(defCost) || 0,
+              };
+            }
+            return next;
+          };
+          if (creating) setNewProductUnitPrices((prev) => apply(prev));
+          else setEditingProductData((prev) => ({ ...prev, unitPrices: apply(prev.unitPrices) }));
+          setUnitPriceAddSel("");
+        };
+        // Remove uma unidade comercializável (limpa venda/custo configurados).
+        const removeUnit = (u) => {
+          const apply = (prev) => {
+            const next = { ...(prev || {}) };
+            delete next[u];
+            return next;
+          };
+          if (creating) setNewProductUnitPrices((prev) => apply(prev));
+          else setEditingProductData((prev) => ({ ...prev, unitPrices: apply(prev.unitPrices) }));
+        };
+        return (
+        <div className="modal">
+          <div className="modal-content">
+            <h3 className="texto-add-unidade">Valores por unidade — {prodName}</h3>
+            <p style={{ color: '#333', fontSize: '13px', marginBottom: '10px', textShadow: 'none' }}>
+              Defina o valor de venda e de custo de cada unidade comercializável. Serão sugeridos automaticamente na entrada de estoque.
+            </p>
+            <div className="unit-prices-list">
+              <div className="unit-prices-row unit-prices-row--head">
+                <span>Unidade</span>
+                <span>Venda (R$)</span>
+                <span>Custo (R$)</span>
+              </div>
+              {allUnits.length === 0 ? (
+                <p style={{ color: '#333', fontSize: '13px', margin: '8px 0', textShadow: 'none' }}>
+                  Dê entrada no estoque ou adicione uma unidade abaixo para definir valores.
+                </p>
+              ) : allUnits.map((u) => {
+                const cfg = up[u] || {};
+                const podeRemover = !baseUnits.includes(u); // unidades com estoque não podem ser removidas
+                return (
+                  <div className="unit-prices-row" key={u}>
+                    <span className="unit-prices-name">
+                      <button
+                        type="button"
+                        className="unit-prices-remove"
+                        title={podeRemover ? "Remover unidade comercializável" : "Limpar valores (unidade com estoque)"}
+                        onClick={() => removeUnit(u)}
+                        style={{ marginRight: 6, border: 'none', background: 'transparent', color: '#c0392b', cursor: 'pointer', fontWeight: 'bold', fontSize: 16, lineHeight: 1, textShadow: 'none' }}
+                      >
+                        ×
+                      </button>
+                      {u}
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder={String(defValue ?? "")}
+                      value={cfg.value ?? ""}
+                      onChange={(e) => setUP(u, "value", e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder={String(defCost ?? "")}
+                      value={cfg.cost ?? ""}
+                      onChange={(e) => setUP(u, "cost", e.target.value)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {addableUnits.length > 0 && (
+              <div className="unit-prices-add" style={{ marginTop: 10 }}>
+                <select
+                  value={unitPriceAddSel}
+                  onChange={(e) => addUnit(e.target.value)}
+                  style={{ width: '100%', padding: '8px', borderRadius: 6 }}
+                >
+                  <option value="">+ Adicionar unidade comercializável…</option>
+                  {addableUnits.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="modal-buttons">
+              <button onClick={() => setIsUnitPricesModalOpen(false)}>Concluir</button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {isCategoryModalAdd && (
         <div className="modal">
@@ -661,31 +734,86 @@ const ProductList = () => {
         <div className="modal">
           <div className="modal-content">
             <h3 className="texto-add-unidade">
-              {unitEquivalences[selectedUnitForEquivalence] ? 'Editar Equivalência' : 'Definir Equivalência'}
+              {unitEquivalences[selectedUnitForEquivalence] !== undefined ? 'Editar Unidade' : 'Nova Unidade'}: {selectedUnitForEquivalence}
             </h3>
-            <p style={{ color: '#333', fontSize: '14px', marginBottom: '15px', textShadow: 'none' }}>
-              Quantas unidades representa 1 {selectedUnitForEquivalence}?
+
+            <p style={{ color: '#333', fontSize: '13px', marginBottom: '10px', textShadow: 'none', fontWeight: 600 }}>
+              Tipo de unidade:
             </p>
-            <input 
-              className="texto-unidade" 
-              type="number" 
-              value={unitEquivalence} 
-              onChange={(e) => setUnitEquivalence(e.target.value)} 
-              placeholder="Ex: 12" 
-              min="1"
-              step="0.1"
-            />
-            <p style={{ color: '#666', fontSize: '12px', marginTop: '10px', textShadow: 'none' }}>
-              Exemplo: 1 {selectedUnitForEquivalence} = {unitEquivalence || '?'} Unidades
-            </p>
-            <div className="modal-buttons">
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: '#333', textShadow: 'none' }}>
+                <input
+                  type="radio"
+                  name="unitType"
+                  value="empacotada"
+                  checked={unitType === "empacotada"}
+                  onChange={() => setUnitType("empacotada")}
+                />
+                📦 Empacotada (Fardo, Caixa…)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: '#333', textShadow: 'none' }}>
+                <input
+                  type="radio"
+                  name="unitType"
+                  value="porcao"
+                  checked={unitType === "porcao"}
+                  onChange={() => setUnitType("porcao")}
+                />
+                🥃 Porção / Dose (Dose, Taça, Copo…)
+              </label>
+            </div>
+
+            {unitType === "empacotada" ? (
+              <>
+                <p style={{ color: '#333', fontSize: '14px', marginBottom: '8px', textShadow: 'none' }}>
+                  Quantas <strong>Unidades</strong> representa 1 {selectedUnitForEquivalence}?
+                </p>
+                <input
+                  className="texto-unidade"
+                  type="number"
+                  value={unitEquivalence}
+                  onChange={(e) => setUnitEquivalence(e.target.value)}
+                  placeholder="Ex: 12"
+                  min="1"
+                  step="0.1"
+                />
+                <p style={{ color: '#666', fontSize: '12px', marginTop: '8px', textShadow: 'none' }}>
+                  Exemplo: 1 {selectedUnitForEquivalence} = {unitEquivalence || '?'} Unidades
+                </p>
+              </>
+            ) : (
+              <>
+                <div style={{ background: '#f0f7ff', border: '1px solid #b3d1f7', borderRadius: '8px', padding: '12px', fontSize: '13px', color: '#1a4d8a', textShadow: 'none', marginBottom: '12px' }}>
+                  <strong>Unidade fracional</strong> — representa uma porção gerada a partir de uma unidade-pai (ex: 1 Garrafa → 9 Doses).<br /><br />
+                  Informe abaixo <strong>quantas {selectedUnitForEquivalence || 'porções'}</strong> saem de <strong>1 unidade-pai</strong>:
+                </div>
+                <input
+                  className="texto-unidade"
+                  type="number"
+                  value={fractionalValue}
+                  onChange={(e) => setFractionalValue(e.target.value)}
+                  placeholder="Ex: 9 (1 Garrafa → 9 Doses) ou 0,5 (metade)"
+                  min="0.01"
+                  step="any"
+                />
+                {fractionalValue && parseFloat(fractionalValue) > 0 && (
+                  <p style={{ color: '#1a4d8a', fontSize: '12px', marginTop: '8px', textShadow: 'none' }}>
+                    1 unidade-pai → <strong>{fractionalValue} {selectedUnitForEquivalence}(s)</strong>
+                  </p>
+                )}
+              </>
+            )}
+
+            <div className="modal-buttons" style={{ marginTop: '16px' }}>
               <button onClick={handleSaveUnitEquivalence}>
-                {unitEquivalences[selectedUnitForEquivalence] ? 'Atualizar' : 'Confirmar'}
+                {unitEquivalences[selectedUnitForEquivalence] !== undefined ? 'Atualizar' : 'Confirmar'}
               </button>
               <button onClick={() => {
                 setIsUnitEquivalenceModalOpen(false);
                 setSelectedUnitForEquivalence("");
                 setUnitEquivalence("");
+                setFractionalValue("");
+                setUnitType("empacotada");
               }}>Cancelar</button>
             </div>
           </div>
@@ -694,88 +822,64 @@ const ProductList = () => {
 
       {/* Formulário de entrada */}
       <div className="input-group" onKeyDown={(e) => { if (e.key === "Enter") handleAddProduct(); }}>
-        {/* Campo de auto-complete para nome do produto */}
-        <div className="autocomplete-wrapper">
-          <input 
-            type="text" 
-            value={newProduct} 
-            onChange={handleProductInputChange}
-            onBlur={handleProductInputBlur}
-            onFocus={() => {
-              if (newProduct.length > 0 && productSuggestions.length > 0) {
-                setShowSuggestions(true);
-              }
-            }}
-            placeholder="Nome do Produto" 
-            disabled={isLoading} 
-          />
-          {showSuggestions && productSuggestions.length > 0 && (
-            <ul className="suggestions-list">
-              {productSuggestions.map((suggestion, index) => (
-                <li
-                  key={index}
-                  onClick={() => handleSuggestionClick(suggestion)}
-                  className="suggestion-item"
-                >
-                  {suggestion}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
         <input 
+          type="text" 
+          value={newProduct} 
+          onChange={(e) => setNewProduct(e.target.value)} 
+          placeholder="Nome do Produto" 
+          disabled={isLoading} 
+        />
+        {/* <input 
           type="number" 
           value={quantity} 
           onChange={(e) => setQuantity(e.target.value)} 
           placeholder="Quantidade" 
           disabled={isLoading} 
+        /> */}
+        <input 
+          type="number" 
+          value={value} 
+          onChange={(e) => setPreco(e.target.value)} 
+          placeholder="Valor (R$)" 
+          disabled={isLoading} 
         />
-        <div className="currency-input-wrapper">
-          <span className="currency-prefix">R$</span>
-          <input 
-            type="text" 
-            value={value} 
-            onChange={(e) => {
-              const formatted = formatCurrencyInput(e.target.value);
-              setPreco(formatted);
-            }}
-            placeholder="0,00" 
-            disabled={isLoading}
-          />
-        </div>
-        <div className="currency-input-wrapper">
-          <span className="currency-prefix">R$</span>
-          <input 
-            className="input-custo-calculado"
-            type="text" 
-            value={valuecusto} 
-            onChange={(e) => {
-              const formatted = formatCurrencyInput(e.target.value);
-              setPrecoCusto(formatted);
-            }}
-            placeholder="0,00" 
-            disabled={isLoading}
-            title="Calculado automaticamente (Valor x Quantidade), mas pode ser editado"
-          />
-        </div>
+        <input 
+          type="number" 
+          value={valuecusto} 
+          onChange={(e) => setPrecoCusto(e.target.value)} 
+          placeholder="Custo (R$)" 
+          disabled={isLoading} 
+        />
         
         {/* Seletor de unidades */}
         <div className="custom-select">
           <div className="selected-unit">
             {unit || "Selecione uma unidade"}
-            {unit && unit !== "Unidade" && unitEquivalences[unit] && (
+            {unit && unit !== "Unidade" && unitEquivalences[unit] > 1 && (
               <span style={{ fontSize: '11px', color: '#666', marginLeft: '5px', textShadow: 'none' }}>
                 (1 = {unitEquivalences[unit]} un.)
               </span>
             )}
           </div>
           <ul className="unit-dropdown">
+            <li>
+              <input
+                type="text"
+                className="expense-filter-input"
+                placeholder="Filtrar unidades..."
+                value={unitFilter}
+                onChange={(e) => setUnitFilter(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </li>
             <li className="unit-item">
-              <span className="unit-name" onClick={() => setUnit("Unidade")}>
+              <span className="unit-name" onClick={() => { setUnit("Unidade"); setUnitFilter(""); }}>
                 Unidade
               </span>
             </li>
-            {Object.keys(unitEquivalences).filter(u => u !== "Unidade").map((u, index) => (
+            {Object.keys(unitEquivalences)
+              .filter((u) => u !== "Unidade" && u.toLowerCase().includes(unitFilter.toLowerCase()))
+              .map((u, index) => (
               <li key={index} className="unit-item">
                 <span className="unit-name" onClick={() => handleUnitSelection(u)}>
                   {u}
@@ -818,6 +922,20 @@ const ProductList = () => {
             </li>
           </ul>
         </div>
+
+        {/* Seletor de unidade base (unitária = 1) */}
+        <select
+          className="base-unit-select"
+          value={baseUnit}
+          onChange={(e) => setBaseUnit(e.target.value)}
+          disabled={isLoading}
+          title="Unidade de referência para conversão. Vazio = automático (menor unidade cadastrada)."
+        >
+          <option value="">Ref.: automática</option>
+          {Object.keys(unitEquivalences).map((u, index) => (
+            <option key={index} value={u}>{u}</option>
+          ))}
+        </select>
         
         {/* Seletor de categorias */}
         <div className="custom-select custom-select-category">
@@ -913,36 +1031,20 @@ const ProductList = () => {
           )}
         </div>
         
+        <button
+          type="button"
+          style={{ marginTop: '19px', textShadow: 'none' }}
+          className="unit-prices-open-btn create-unit-prices-btn"
+          onClick={() => { setEditingProduct(null); setIsUnitPricesModalOpen(true); }}
+          disabled={isLoading}
+          title="Definir valor de venda/custo por unidade para o novo produto"
+        >
+          💲 Valores por unidade
+        </button>
+
         <button onClick={handleAddProduct} disabled={isLoading}>
           {isLoading ? <FaSpinner className="loading-iconn" /> : "Adicionar Produto"}
         </button>
-      </div>
-
-      {/* Filtros de ordenação */}
-      <div className={`sort-filters ${isCategoryModalOpen ? 'modal-open' : ''}`}>
-        <label>Ordenar por:</label>
-        <select 
-          value={sortField} 
-          onChange={(e) => {
-            setSortField(e.target.value);
-            if (!e.target.value) setSortOrder("asc");
-          }}
-        >
-          <option value="">Nenhum</option>
-          <option value="name">Nome (A-Z)</option>
-          <option value="quantity">Quantidade</option>
-          <option value="value">Valor</option>
-          <option value="valuecusto">Custo</option>
-        </select>
-        {sortField && (
-          <button 
-            className="sort-order-btn"
-            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-            title={sortOrder === "asc" ? "Crescente" : "Decrescente"}
-          >
-            {sortOrder === "asc" ? "↑ Crescente" : "↓ Decrescente"}
-          </button>
-        )}
       </div>
 
       {/* Lista de produtos */}
@@ -950,62 +1052,36 @@ const ProductList = () => {
         {/* Cabeçalho da lista */}
         <div className="product-list-header">
           <span className="header-name">Nome do Produto</span>
-          <span className="header-quantity">Qtd</span>
           <span className="header-unit">Unidade</span>
           <span className="header-category">Categoria</span>
           <span className="header-value">Valor</span>
           <span className="header-value">Custo</span>
+          <span className="header-units">Un. comercializáveis</span>
           <span className="header-actions">Ações</span>
         </div>
 
-        {/* Lista agrupada por categoria hierárquica */}
+        {/* Lista agrupada por categoria */}
         <ul style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
-          {Object.entries(groupProductsByCategory(filteredProducts)).map(([parentName, parentData]) => (
-            <li key={parentName} className="product-group">
-              {/* Cabeçalho da categoria PAI */}
-              <div className="group-header parent-category-header" onClick={() => toggleGroup(parentName)}>
-                <span> {parentName}</span>
-                <span>{parentData.totalCount} produtos</span>
+          {Object.entries(groupProductsByCategory(filteredProducts))
+            .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
+            .map(([categoryName, categoryProducts]) => (
+            <li key={categoryName} className="product-group">
+              <div className="group-header" onClick={() => toggleGroup(categoryName)}>
+                <span>{categoryName}</span>
+                <span>{categoryProducts.length} produtos</span>
                 <button 
                   className="botao-expend"
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleGroup(parentName);
+                    toggleGroup(categoryName);
                   }}
                 >
-                  {expandedGroups[parentName] ? "Ocultar" : "Expandir"}
+                  {expandedGroups[categoryName] ? "Ocultar" : "Expandir"}
                 </button>
               </div>
-              
-              {/* Se expandido, mostra as SUBCATEGORIAS */}
-              {expandedGroups[parentName] && (
-                <ul style={{ listStyleType: 'none', paddingLeft: '20px' }}>
-                  {Object.entries(parentData.subcategories).map(([subName, subProducts]) => (
-                    <li key={`${parentName}-${subName}`} className="subcategory-group">
-                      {/* Cabeçalho da SUBCATEGORIA */}
-                      <div 
-                        className="group-header subcategory-header" 
-                        onClick={() => toggleGroup(`${parentName}-${subName}`)}
-                      >
-                        <span>
-                          {subName === '_direct' ? ' Produtos diretos' : ` ${subName}`}
-                        </span>
-                        <span>{subProducts.length} produtos</span>
-                        <button 
-                          className="botao-expend"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleGroup(`${parentName}-${subName}`);
-                          }}
-                        >
-                          {expandedGroups[`${parentName}-${subName}`] ? "Ocultar" : "Expandir"}
-                        </button>
-                      </div>
-                      
-                      {/* Se expandido, mostra os PRODUTOS */}
-                      {expandedGroups[`${parentName}-${subName}`] && (
-                        <ul className="group-details">
-                          {subProducts.map((product) => (
+              {expandedGroups[categoryName] && (
+                <ul className="group-details">
+                  {categoryProducts.map((product) => (
                     <li key={product.id} className="lista-produtos">
                       {editingProduct === product.id ? (
                         // Formulário de edição
@@ -1020,7 +1096,7 @@ const ProductList = () => {
                               className="product-edit-input"
                             />
                           </div>
-                          <div className="product-edit-field">
+                          {/* <div className="product-edit-field">
                             <label className="product-edit-label">Quantidade</label>
                             <input
                               type="number"
@@ -1029,7 +1105,7 @@ const ProductList = () => {
                               placeholder="Quantidade"
                               className="product-edit-input"
                             />
-                          </div>
+                          </div> */}
                           <div className="product-edit-field">
                             <label className="product-edit-label">Unidade</label>
                             <select 
@@ -1037,6 +1113,20 @@ const ProductList = () => {
                               onChange={(e) => setEditingProductData({ ...editingProductData, unit: e.target.value })}
                               className="product-edit-input"
                             >
+                              {Object.keys(unitEquivalences).map((u, index) => (
+                                <option key={index} value={u}>{u}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="product-edit-field">
+                            <label className="product-edit-label">Unidade de referência</label>
+                            <select 
+                              value={editingProductData.baseUnit || ""} 
+                              onChange={(e) => setEditingProductData({ ...editingProductData, baseUnit: e.target.value })}
+                              className="product-edit-input"
+                              title="Unidade de referência para conversão. Vazio = automático (menor unidade)."
+                            >
+                              <option value="">Automático (menor unidade)</option>
                               {Object.keys(unitEquivalences).map((u, index) => (
                                 <option key={index} value={u}>{u}</option>
                               ))}
@@ -1082,6 +1172,45 @@ const ProductList = () => {
                               className="product-edit-input"
                             />
                           </div>
+                          <div className="product-edit-field product-edit-field--pdv-units">
+                            <label className="product-edit-label">Unidades no PDV</label>
+                            {(editingProductData._productUnits || []).length === 0 ? (
+                              <span className="pdv-units-hint">Dê entrada no estoque para configurar as unidades vendáveis.</span>
+                            ) : (
+                              <div className="pdv-units-list">
+                                {(editingProductData._productUnits || []).map((u) => {
+                                  const hidden = (editingProductData.pdvHiddenUnits || []).includes(u);
+                                  return (
+                                    <label key={u} className="pdv-unit-checkbox" title={hidden ? "Oculto no PDV" : "Aparece no PDV"}>
+                                      <input
+                                        type="checkbox"
+                                        checked={!hidden}
+                                        onChange={(e) => {
+                                          const current = editingProductData.pdvHiddenUnits || [];
+                                          const next = e.target.checked
+                                            ? current.filter((x) => x !== u)
+                                            : [...current, u];
+                                          setEditingProductData({ ...editingProductData, pdvHiddenUnits: next });
+                                        }}
+                                      />
+                                      <span>{u}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <div className="product-edit-field product-edit-field--pdv-units">
+                            <label className="product-edit-label">Valores por unidade</label>
+                            <button
+                              type="button"
+                              style={{ textShadow: 'none' }}
+                              className="unit-prices-open-btn"
+                              onClick={() => setIsUnitPricesModalOpen(true)}
+                            >
+                              💲 Valores de venda/custo por unidade
+                            </button>
+                          </div>
                           <div className="product-edit-buttons">
                             <button 
                               onClick={() => handleUpdateProduct(product.id)} 
@@ -1102,7 +1231,6 @@ const ProductList = () => {
                         // Exibição normal do produto
                         <div className="product-info-display">
                           <span className="product-name">{product.name}</span>
-                          <span className="product-quantity">{product.quantity}</span>
                           <span className="product-unit">{product.unit}</span>
                           <span className="product-category">
                             {product.category?.parent 
@@ -1112,19 +1240,31 @@ const ProductList = () => {
                           </span>
                           <span className="product-value">{formatCurrency(product.value)}</span>
                           <span className="product-value">{formatCurrency(product.valuecusto)}</span>
+                          <span className="product-units">
+                            {(() => {
+                              const entries = Object.entries(product.unitPrices || {}).filter(
+                                ([, cfg]) => cfg && (cfg.value != null || cfg.cost != null)
+                              );
+                              if (entries.length === 0) return <span className="product-units-empty">—</span>;
+                              return entries.map(([u, cfg]) => (
+                                <span className="product-unit-chip" key={u} title={`${u} — Venda: ${formatCurrency(cfg.value ?? product.value)} · Custo: ${formatCurrency(cfg.cost ?? product.valuecusto)}`}>
+                                  <strong>{u}</strong>
+                                  <span className="product-unit-chip-vals">
+                                    V: {formatCurrency(cfg.value ?? product.value)} · C: {formatCurrency(cfg.cost ?? product.valuecusto)}
+                                  </span>
+                                </span>
+                              ));
+                            })()}
+                          </span>
                           <div className="product-actions">
                             <button onClick={() => handleEditProduct(product)} className="update-button">
                               Editar
                             </button>
-                            <button onClick={() => handleDeleteProduct(product.id)} className="delete-buttonn">
+                            <button onClick={() => handleDeleteProduct(product.id)} className="delete-button">
                               Excluir
                             </button>
                           </div>
                         </div>
-                      )}
-                    </li>
-                  ))}
-                        </ul>
                       )}
                     </li>
                   ))}
@@ -1158,11 +1298,96 @@ const ProductList = () => {
         />
       )}
 
+      </>)}
+
+      {/* ===== ABA LISTA DE COMPRAS ===== */}
+      {activeTab === "compras" && (
+        <div className="pl-lista-section">
+          <div className="pl-lista-header">
+            <div className="pl-lista-filtros">
+              {["PENDENTE", "CONCLUIDO", "TODOS"].map(f => (
+                <button
+                  key={f}
+                  className={`pl-lista-filtro-btn ${listaFiltro === f ? "pl-lista-filtro-btn--active" : ""}`}
+                  onClick={() => setListaFiltro(f)}
+                >
+                  {f === "PENDENTE" ? "Pendentes" : f === "CONCLUIDO" ? "Concluídos" : "Todos"}
+                </button>
+              ))}
+              <button className="pl-lista-refresh-btn" onClick={fetchListaCompras} title="Atualizar">
+                <FaRedo size={12} />
+              </button>
+            </div>
+          </div>
+
+          {isLoadingLista ? (
+            <div className="pl-lista-loading"><FaSpinner className="loading-iconn" /> Carregando...</div>
+          ) : (() => {
+            const filtrados = listaCompras.filter(i =>
+              listaFiltro === "TODOS" ? true : i.status === listaFiltro
+            );
+            if (filtrados.length === 0) return (
+              <div className="pl-lista-empty">
+                {listaFiltro === "PENDENTE" ? "✅ Nenhum produto abaixo do estoque mínimo!" : "Nenhum item encontrado."}
+              </div>
+            );
+            const grouped = {};
+            filtrados.forEach(item => {
+              const cat = item.estoque?.category?.parent
+                ? `${item.estoque.category.parent.name} › ${item.estoque.category.name}`
+                : item.estoque?.category?.name || "Sem Categoria";
+              if (!grouped[cat]) grouped[cat] = [];
+              grouped[cat].push(item);
+            });
+            return Object.entries(grouped).map(([cat, items]) => (
+              <div key={cat} className="pl-lista-group">
+                <div className="pl-lista-group-header" onClick={() => setExpandedListaGroups(prev => ({ ...prev, [cat]: !prev[cat] }))}>
+                  <span>📁 {cat} <small>({items.length})</small></span>
+                  <button className="pl-lista-expand-btn">{expandedListaGroups[cat] === false ? "Expandir" : "Ocultar"}</button>
+                </div>
+                {expandedListaGroups[cat] !== false && (
+                  <div className="pl-lista-items">
+                    {items.map(item => (
+                      <div key={item.id} className={`pl-lista-item ${item.status === "CONCLUIDO" ? "pl-lista-item--done" : ""}`}>
+                        <div className="pl-lista-item-left">
+                          {item.status === "CONCLUIDO"
+                            ? <FaCheck className="pl-lista-item-icon pl-lista-item-icon--done" />
+                            : <FaBell className="pl-lista-item-icon pl-lista-item-icon--pending" />
+                          }
+                          <div className="pl-lista-item-info">
+                            <span className="pl-lista-item-nome">{item.nomeProduto}</span>
+                            <span className="pl-lista-item-qtd">
+                              Atual: <strong>{item.quantidadeAtual} {item.estoque?.unit || ""}</strong>
+                              &nbsp;/&nbsp;Mínimo: <strong>{item.quantidadeMinima} {item.estoque?.unit || ""}</strong>
+                            </span>
+                            {item.status === "CONCLUIDO" && item.concluidoEm && (
+                              <span className="pl-lista-item-data">Conclufdo em {new Date(item.concluidoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                            )}
+                            {item.status === "PENDENTE" && (
+                              <span className="pl-lista-item-data">Registrado em {new Date(item.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="pl-lista-item-actions">
+                          {item.status === "PENDENTE"
+                            ? <button className="pl-lista-btn-concluir" onClick={() => handleConcluirListaItem(item.id)} title="Marcar como conclufdo"><FaCheck /></button>
+                            : <button className="pl-lista-btn-reabrir" onClick={() => handleReabrirListaItem(item.id)} title="Reabrir"><FaRedo /></button>
+                          }
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ));
+          })()}
+        </div>
+      )}
       {message && (
-        <Message 
-          message={message.text} 
-          type={message.type} 
-          onClose={() => setMessage(null)} 
+        <Message
+          message={message.text}
+          type={message.type}
+          onClose={() => setMessage(null)}
         />
       )}
     </div>

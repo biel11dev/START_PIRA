@@ -18,14 +18,14 @@
   background: transparent !important;
 }
 
-.message {
+/* .message {
   text-align: center;
   margin-bottom: 10px;
   padding: 10px;
   background-color: #4caf50;
   color: white;
   border-radius: 4px;
-}
+} */
 
 .ponto-table {
   width: 100vh;
