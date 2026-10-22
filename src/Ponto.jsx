@@ -3187,7 +3187,7 @@ const handleSaveEdit = () => {
               {isAdmin && (
                 <div>
                   <strong>Ponto automático:</strong>
-                  <div style={{ margin: "4px 0" }}>
+                  <div style={{ margin: "4px 0", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <button
                       type="button"
                       onClick={() => handleToggleAutoPonto(selectedEmployeeForDetails, !selectedEmployeeForDetails.autoPonto)}
@@ -3203,6 +3203,18 @@ const handleSaveEdit = () => {
                     >
                       {selectedEmployeeForDetails.autoPonto ? "Habilitado" : "Desabilitado"}
                     </button>
+                    <span style={{ color: "#333", fontSize: 13, textShadow: "none" }}>
+                      Último login:{" "}
+                      <strong>
+                        {(() => {
+                          const local = selectedEmployeeForDetails.ultimoLoginLocal;
+                          if (!local) return "sem registro";
+                          const [data, hora] = local.split(" ");
+                          const [ano, mes, dia] = data.split("-");
+                          return `${dia}/${mes}/${ano} ${hora}`;
+                        })()}
+                      </strong>
+                    </span>
                   </div>
                   <p style={{ margin: "4px 0", color: "#666", fontSize: 12, textShadow: "none" }}>
                     Registra a entrada no login e a saída no logout (com confirmação) deste funcionário.
